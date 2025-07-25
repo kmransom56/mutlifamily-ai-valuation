@@ -49,17 +49,55 @@ A comprehensive, AI-powered platform for analyzing and valuing multifamily real 
 
 ## 📦 Installation
 
-### Prerequisites
+### 🐳 Quick Start (Docker - Recommended)
+
+**One-click installation with Docker:**
+
+```bash
+git clone https://github.com/kmransom56/mutlifamily-ai-valuation.git
+cd mutlifamily-ai-valuation
+./install.sh
+```
+
+Then open: http://localhost:3000
+
+**What you get:**
+- ✅ Complete application with all services
+- ✅ Redis for real-time WebSocket sessions
+- ✅ PostgreSQL database with schemas
+- ✅ Nginx reverse proxy (production)
+- ✅ Automated environment setup
+- ✅ Volume persistence for data
+
+**Prerequisites for Docker:**
+- Docker Desktop installed ([Download here](https://www.docker.com/products/docker-desktop/))
+- 4GB+ RAM available
+
+**Management commands:**
+```bash
+npm run docker:dev    # Development with hot reload
+npm run docker:prod   # Production mode
+npm run docker:logs   # View logs
+npm run docker:down   # Stop all services
+```
+
+📖 **Detailed Docker guide:** [README-DOCKER.md](README-DOCKER.md)
+
+---
+
+### 🛠️ Manual Installation (Advanced)
+
+**Prerequisites:**
 - Node.js 18+ and npm
 - Python 3.8+ (for backend processing)
 - Google Cloud Project (for Drive integration)
 
-### Setup
+**Setup:**
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/multifamily-valuation-app.git
-   cd multifamily-valuation-app
+   git clone https://github.com/kmransom56/mutlifamily-ai-valuation.git
+   cd mutlifamily-ai-valuation
    ```
 
 2. **Install dependencies**
@@ -69,14 +107,14 @@ A comprehensive, AI-powered platform for analyzing and valuing multifamily real 
 
 3. **Environment configuration**
    ```bash
-   cp .env.example .env.local
+   cp .env.docker .env.local
    ```
    
    Configure the following variables:
    ```env
    # NextAuth Configuration
    NEXTAUTH_URL=http://localhost:3000
-   NEXTAUTH_SECRET=your-secret-key
+   NEXTAUTH_SECRET=your-secure-32-character-secret-key
    
    # Google OAuth & Drive API
    GOOGLE_CLIENT_ID=your-google-client-id
@@ -225,27 +263,60 @@ npm run test:e2e
 
 ## 🚀 Deployment
 
-### Docker Deployment
-```bash
-# Build Docker image
-docker build -t multifamily-valuation-app .
+### 🐳 Docker Deployment (Recommended)
 
-# Run container
-docker run -p 3000:3000 multifamily-valuation-app
+**Production deployment:**
+```bash
+# One-click production setup
+./install.sh
+
+# Or manual production start
+docker-compose up -d
+
+# With custom domain and SSL
+docker-compose --profile production up -d
 ```
 
-### Vercel Deployment
+**Cloud deployment (AWS/GCP/Azure):**
+```bash
+# Update environment for production
+cp .env.docker .env.local
+# Configure your production values
+
+# Deploy with production profile
+docker-compose --profile production up -d
+```
+
+**Services included:**
+- **Application**: Runs on port 3000
+- **PostgreSQL**: Production database on port 5432
+- **Redis**: Session storage on port 6379
+- **Nginx**: Reverse proxy on ports 80/443
+
+### Vercel Deployment (Alternative)
 1. Connect GitHub repository to Vercel
 2. Configure environment variables
 3. Deploy automatically on push to main branch
 
 ### Environment Variables for Production
 ```env
+# Required
 NEXTAUTH_URL=https://yourdomain.com
-NEXTAUTH_SECRET=production-secret
+NEXTAUTH_SECRET=your-secure-32-character-production-secret
 GOOGLE_CLIENT_ID=production-client-id
 GOOGLE_CLIENT_SECRET=production-client-secret
+
+# Database (Docker automatic)
+DATABASE_URL=postgresql://user:password@postgres:5432/multifamily_db
+REDIS_URL=redis://redis:6379
+
+# Optional
+SMTP_HOST=smtp.gmail.com
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
 ```
+
+**🔧 Production setup guide:** [README-DOCKER.md](README-DOCKER.md)
 
 ## 📈 Performance
 
@@ -274,30 +345,50 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🆘 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/multifamily-valuation-app/issues)
-- **Documentation**: [Wiki](https://github.com/yourusername/multifamily-valuation-app/wiki)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/multifamily-valuation-app/discussions)
+- **Issues**: [GitHub Issues](https://github.com/kmransom56/mutlifamily-ai-valuation/issues)
+- **Documentation**: [README-DOCKER.md](README-DOCKER.md) for Docker setup
+- **Repository**: [GitHub Repository](https://github.com/kmransom56/mutlifamily-ai-valuation)
 
 ## 🚧 Roadmap
 
 ### Upcoming Features
-- [ ] Advanced AI market analysis
-- [ ] Integration with MLS data sources
-- [ ] Mobile application
-- [ ] Advanced reporting and analytics
+- [ ] Advanced AI market analysis with ML predictions
+- [ ] Integration with MLS and real estate data sources
+- [ ] Mobile application (React Native)
+- [ ] Advanced reporting and analytics dashboard
 - [ ] Multi-language support
-- [ ] API for third-party integrations
+- [ ] REST API for third-party integrations
+- [ ] Kubernetes deployment support
+- [ ] Advanced security features (2FA, SSO)
+- [ ] Performance monitoring and alerting
+- [ ] Automated testing and CI/CD
 
-## 📸 Screenshots
+## 📸 Key Features Overview
 
-### Dashboard
-![Dashboard](docs/images/dashboard.png)
+### 🏢 Property Analysis Dashboard
+- Real-time financial modeling and projections
+- Interactive charts and visualizations
+- Portfolio management and tracking
 
-### Document Preview
-![Document Preview](docs/images/document-preview.png)
+### 📄 Advanced Document Processing
+- AI-powered text extraction and analysis
+- Interactive document preview with annotations
+- Support for PDF, Excel, Word, and image files
 
-### Export Panel
-![Export Panel](docs/images/export-panel.png)
+### 📊 Multi-format Export System
+- Professional pitch deck generation (PowerPoint)
+- Detailed financial reports (Excel, PDF)
+- Custom export templates and branding
+
+### 🔔 Investor Communication
+- Automated email notifications
+- Professional templates for different scenarios
+- Investor database and segmentation
+
+### ⚡ Real-time Processing
+- WebSocket-based live status updates
+- Progress tracking for long-running analyses
+- Instant notification system
 
 ---
 
