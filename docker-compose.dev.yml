@@ -1,0 +1,65 @@
+version: '3.8'
+
+# Development Docker Compose Configuration
+# Use this for development with hot reload
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=dev-secret-key-change-this
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+      - ./uploads:/app/uploads
+      - ./outputs:/app/outputs
+      - ./storage:/app/storage
+    restart: unless-stopped
+    depends_on:
+      - redis
+    networks:
+      - multifamily_dev_network
+    command: npm run dev
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    restart: unless-stopped
+    networks:
+      - multifamily_dev_network
+    command: redis-server --appendonly yes
+
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=multifamily_dev
+      - POSTGRES_USER=dev_user
+      - POSTGRES_PASSWORD=dev_password
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    networks:
+      - multifamily_dev_network
+
+volumes:
+  redis_dev_data:
+  postgres_dev_data:
+
+networks:
+  multifamily_dev_network:
+    driver: bridge

@@ -1,0 +1,26 @@
+# Development Dockerfile for hot reload and debugging
+
+FROM node:18-alpine
+
+# Install dependencies for development
+RUN apk add --no-cache libc6-compat python3 make g++
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json* ./
+
+# Install all dependencies (including dev dependencies)
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Create necessary directories
+RUN mkdir -p uploads outputs storage/exports storage/temp
+
+# Expose the port
+EXPOSE 3000
+
+# Start the development server with hot reload
+CMD ["npm", "run", "dev"]
