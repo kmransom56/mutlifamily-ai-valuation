@@ -1,0 +1,19 @@
+name = "multifamily-valuation-app"
+compatibility_date = "2023-12-01"
+
+[site]
+bucket = "./public"
+
+[build]
+command = "npm run build"
+
+[env.production]
+name = "multifamily-valuation-app-production"
+routes = [
+  { pattern = "app.netintegrate.net", custom_domain = true }
+]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "multifamily_valuation"
+database_id = "local"
