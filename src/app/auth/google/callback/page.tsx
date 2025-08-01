@@ -1,9 +1,12 @@
 'use client';
 
-import { useEffect } from 'react';
+// Force dynamic rendering for this page
+export const dynamic = 'force-dynamic';
+
+import { useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
-export default function GoogleAuthCallback() {
+function GoogleCallbackContent() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -89,5 +92,13 @@ export default function GoogleAuthCallback() {
         <p className="text-sm text-gray-500 mt-2">This window will close automatically.</p>
       </div>
     </div>
+  );
+}
+
+export default function GoogleAuthCallback() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <GoogleCallbackContent />
+    </Suspense>
   );
 }

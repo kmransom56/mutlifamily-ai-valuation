@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     const { userId, context } = body;
 
     // Validate user access
-    if (userId !== session.user.id && session.user.role !== 'admin') {
+    if (userId !== (session.user as any).id && (session.user as any).role !== 'admin') {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
@@ -85,13 +85,10 @@ export async function POST(request: NextRequest) {
       context: {
         properties: [],
         analysisHistory: [],
-        userPreferences: session.user.preferences || {},
+        userPreferences: (session.user as any).preferences || {},
         ...context
       }
     };
-
-    // In production, store session in database or cache
-    // For now, we'll rely on client-side session management
 
     return NextResponse.json(mcpSession, { status: 201 });
   } catch (error) {
@@ -118,9 +115,6 @@ export async function PUT(request: NextRequest) {
 
     const contextUpdates = await request.json();
 
-    // In production, update session context in database
-    // For now, we'll just acknowledge the update
-
     return NextResponse.json({ 
       success: true,
       sessionId,
@@ -138,7 +132,7 @@ export async function PUT(request: NextRequest) {
 // DELETE /api/mcp/session/[sessionId] - Close MCP session
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { sessionId: string } }
+  { params }: { params: Promise<{ sessionId: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -146,12 +140,11 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // In production, clean up session data from database
-    // For now, we'll just acknowledge the closure
+    const { sessionId } = await params;
 
     return NextResponse.json({ 
       success: true,
-      sessionId: params.sessionId,
+      sessionId,
       closedAt: new Date().toISOString()
     });
   } catch (error) {

@@ -4,20 +4,21 @@ import fs from 'fs';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { filename: string } }
+  { params }: { params: Promise<{ filename: string }> }
 ) {
   try {
-    const filename = decodeURIComponent(params.filename);
+    const { filename } = await params;
+    const decodedFilename = decodeURIComponent(filename);
     
     // Security validation
-    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+    if (decodedFilename.includes('..') || decodedFilename.includes('/') || decodedFilename.includes('\\')) {
       return NextResponse.json(
         { error: 'Invalid filename' },
         { status: 400 }
       );
     }
 
-    const filePath = path.join(process.cwd(), '..', '..', '..', 'output', 'pitch_decks', filename);
+    const filePath = path.join(process.cwd(), '..', '..', '..', 'output', 'pitch_decks', decodedFilename);
 
     if (!fs.existsSync(filePath)) {
       return NextResponse.json(
@@ -32,7 +33,7 @@ export async function GET(
       status: 200,
       headers: {
         'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Disposition': `attachment; filename="${decodedFilename}"`,
         'Content-Length': fileBuffer.length.toString(),
       },
     });

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
-import { authOptions, updateUser, updateUserPreferences } from '@/lib/auth';
+import { authOptions, updateUser, updateUserPreferences, User } from '@/lib/auth';
 
 // GET /api/user/profile - Get user profile
 export async function GET(request: NextRequest) {
@@ -31,7 +31,7 @@ export async function PUT(request: NextRequest) {
     const body = await request.json();
     const { name, preferences, ...otherUpdates } = body;
 
-    let updatedUser = session.user;
+    let updatedUser: User | null = session.user as User;
 
     // Update basic profile info
     if (name || Object.keys(otherUpdates).length > 0) {

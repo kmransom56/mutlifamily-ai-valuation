@@ -93,7 +93,7 @@ export default function ExportPanel({
     }
   };
 
-  const handleExport = async (type: string) => {
+  const handleExport = async (type: 'analysis' | 'pitch_deck' | 'summary' | 'full_report') => {
     const options = selectedOptions[type];
     if (!options) {
       setError('Export options not configured');
@@ -242,7 +242,7 @@ export default function ExportPanel({
                     {exportType.formats.map(format => (
                       <button
                         key={format}
-                        onClick={() => updateExportOptions(exportType.type, { format })}
+                        onClick={() => updateExportOptions(exportType.type, { format: format as 'excel' | 'pdf' | 'json' | 'pptx' | 'csv' })}
                         className={`flex items-center gap-2 px-3 py-2 border rounded-lg text-sm transition-colors ${
                           options.format === format
                             ? 'border-blue-500 bg-blue-50 text-blue-700'
@@ -283,7 +283,7 @@ export default function ExportPanel({
                 <div className="flex items-center justify-between pt-2">
                   <div className="flex items-center gap-3">
                     <Button
-                      onClick={() => handleExport(exportType.type)}
+                      onClick={() => handleExport(exportType.type as 'analysis' | 'pitch_deck' | 'summary' | 'full_report')}
                       disabled={isExporting}
                       className="flex items-center gap-2"
                     >
@@ -335,7 +335,7 @@ export default function ExportPanel({
             <Button
               onClick={() => {
                 availableExports.forEach(exportType => {
-                  setTimeout(() => handleExport(exportType.type), Math.random() * 2000);
+                  setTimeout(() => handleExport(exportType.type as 'analysis' | 'pitch_deck' | 'summary' | 'full_report'), Math.random() * 2000);
                 });
               }}
               variant="outline"

@@ -1,18 +1,38 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
-export default function StatusPage() {
+// Force dynamic rendering for this page
+export const dynamic = 'force-dynamic';
+
+function StatusContent() {
   const searchParams = useSearchParams();
   const jobId = searchParams.get('jobId');
   
   const [status, setStatus] = useState('loading');
-  const [files, setFiles] = useState({});
-  const [propertyInfo, setPropertyInfo] = useState({});
+  
+  interface PropertyInfo {
+    propertyName?: string;
+    propertyType?: string;
+    investmentStrategy?: string;
+    units?: number;
+    location?: string;
+  }
+
+  interface FilesState {
+    populatedTemplate?: string;
+    integratedData?: string;
+    analysisReport?: string;
+    pitchDeck?: string;
+    [key: string]: string | undefined;
+  }
+
+  const [files, setFiles] = useState<FilesState>({});
+  const [propertyInfo, setPropertyInfo] = useState<PropertyInfo | null>(null);
   const [error, setError] = useState('');
   const [isPolling, setIsPolling] = useState(true);
 
@@ -30,8 +50,8 @@ export default function StatusPage() {
 
         if (data.success) {
           setStatus(data.status);
-          setFiles(data.files || {});
-          setPropertyInfo(data.propertyInfo || {});
+          setFiles(data.downloadUrls || {});
+          setPropertyInfo((data.propertyInfo as PropertyInfo) || null);
           
           // If processing is complete, stop polling
           if (data.status === 'completed') {
@@ -54,7 +74,7 @@ export default function StatusPage() {
     checkStatus();
 
     // Set up polling if needed
-    let intervalId;
+    let intervalId: ReturnType<typeof setInterval> | undefined;
     if (isPolling) {
       intervalId = setInterval(checkStatus, 5000); // Check every 5 seconds
     }
@@ -81,7 +101,7 @@ export default function StatusPage() {
             <div className="mb-6">
               <h2 className="text-xl font-semibold mb-2">Job ID: {jobId}</h2>
               
-              {propertyInfo && propertyInfo.propertyName && (
+              {propertyInfo?.propertyName && (
                 <div className="mb-4 p-4 bg-gray-50 rounded-md">
                   <h3 className="font-medium mb-2">Property Information</h3>
                   <div className="grid grid-cols-2 gap-2 text-sm">
@@ -217,5 +237,13 @@ export default function StatusPage() {
       
       <Footer />
     </div>
+  );
+}
+
+export default function StatusPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <StatusContent />
+    </Suspense>
   );
 }

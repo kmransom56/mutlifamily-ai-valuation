@@ -46,8 +46,9 @@ export default function CRMIntegrationPage() {
       } else {
         setError('Failed to connect: ' + (response.error || 'Unknown error'));
       }
-    } catch (err) {
-      setError('Connection error: ' + err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError('Connection error: ' + message);
     } finally {
       setIsLoading(false);
     }
@@ -69,7 +70,9 @@ export default function CRMIntegrationPage() {
   };
   
   // Handle settings change
-  const handleSettingsChange = (e) => {
+  const handleSettingsChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
+  ) => {
     const { name, value } = e.target;
     setSettings({
       ...settings,

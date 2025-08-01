@@ -96,7 +96,7 @@ from pptx import Presentation
 from pptx.util import Inches, Pt
 
 # Load data from YOUR analysis system
-data = ${JSON.stringify(pitch_deck_data).replace(/"/g, '\\\\"')}
+data = ${JSON.stringify(pitch_deck_data).replace(/"/g, '\\"')}
 
 # Create presentation using YOUR data
 prs = Presentation()
@@ -110,7 +110,7 @@ slide = prs.slides.add_slide(prs.slide_layouts[0])
 title = slide.shapes.title
 subtitle = slide.placeholders[1]
 title.text = prop_info['property_name']
-subtitle.text = prop_info['address'] + '\\\\\\nMultifamily Investment Opportunity'
+subtitle.text = prop_info['address'] + '\\nMultifamily Investment Opportunity'
 
 # Executive summary using YOUR analysis
 slide = prs.slides.add_slide(prs.slide_layouts[1])
@@ -118,20 +118,20 @@ title = slide.shapes.title
 content = slide.placeholders[1]
 title.text = 'Executive Summary'
 tf = content.text_frame
-tf.text = f\\\\\"Premium {prop_info['total_units']}-unit multifamily property\\\\\"
+tf.text = 'Premium ' + str(prop_info['total_units']) + '-unit multifamily property'
 
 metrics = [
-    f\\\\\"Purchase Price: $\\${fin_info['purchase_price']:,.0f}\\\\\",
-    f\\\\\"Cap Rate: {fin_info['cap_rate']:.1f}%\\\\\",
-    f\\\\\"NOI: $\\${fin_info['noi']:,.0f}\\\\\",
-    f\\\\\"Price per Unit: $\\${fin_info['price_per_unit']:,.0f}\\\\\",
+    'Purchase Price: $' + str(fin_info['purchase_price']) + '',
+    'Cap Rate: ' + str(fin_info['cap_rate']) + '%',
+    'NOI: $' + str(fin_info['noi']) + '',
+    'Price per Unit: $' + str(fin_info['price_per_unit']) + '',
     'Advanced AI analysis and processing',
     'Professional presentation generation'
 ]
 
 for metric in metrics:
     p = tf.add_paragraph()
-    p.text = f'• {metric}'
+    p.text = '• ' + str(metric)
     p.level = 1
 # Financial highlights from YOUR system
 slide = prs.slides.add_slide(prs.slide_layouts[1])
@@ -142,16 +142,16 @@ tf = content.text_frame
 tf.text = 'Key Investment Metrics:'
 
 highlights = [
-    f\\\\\"Total Units: {prop_info['total_units']}\\\\\",
-    f\\\\\"Year Built: {prop_info['year_built']}\\\\\",
-    f\\\\\"Cap Rate: {fin_info['cap_rate']:.1f}%\\\\\",
-    f\\\\\"Cash-on-Cash: {fin_info['cash_on_cash']:.1f}%\\\\\",
-    f\\\\\"Projected IRR: {fin_info['irr']:.1f}%\\\\\"
+    'Total Units: ' + str(prop_info['total_units']),
+    'Year Built: ' + str(prop_info['year_built']),
+    'Cap Rate: ' + str(fin_info['cap_rate']) + '%',
+    'Cash-on-Cash: ' + str(fin_info['cash_on_cash']) + '%',
+    'Projected IRR: ' + str(fin_info['irr']) + '%'
 ]
 
 for highlight in highlights:
     p = tf.add_paragraph()
-    p.text = f'• {highlight}'
+    p.text = '• ' + str(highlight)
     p.level = 1
 
 # Investment strategy
@@ -172,7 +172,7 @@ strategy = [
 
 for item in strategy:
     p = tf.add_paragraph()
-    p.text = f'• {item}'
+    p.text = '• ' + str(item)
     p.level = 1
 # Contact slide
 slide = prs.slides.add_slide(prs.slide_layouts[1])
@@ -180,7 +180,7 @@ title = slide.shapes.title
 content = slide.placeholders[1]
 title.text = 'Next Steps & Contact'
 tf = content.text_frame
-tf.text = f\\\\\"Investment Opportunity: {prop_info['property_name']}\\\\\"
+tf.text = 'Investment Opportunity: ' + str(prop_info['property_name'])
 
 next_steps = [
     'Schedule property tour and due diligence',
@@ -192,7 +192,7 @@ next_steps = [
 
 for step in next_steps:
     p = tf.add_paragraph()
-    p.text = f'• {step}'
+    p.text = '• ' + str(step)
     p.level = 1
 
 # Save

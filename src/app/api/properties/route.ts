@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { propertyDatabase } from '@/lib/property-database';
-import { PropertyFilter } from '@/types/property';
+import { Property, PropertyFilter } from '@/types/property';
 
 // GET /api/properties - List properties with optional filtering and pagination
 export async function GET(request: NextRequest) {

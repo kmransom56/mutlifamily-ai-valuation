@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create notification
+    const userId = (session.user as any).id || session.user.email || 'anonymous';
     const notification = await createInvestorNotification({
       jobId,
       propertyId,
@@ -42,7 +43,7 @@ export async function POST(request: NextRequest) {
       content,
       attachments,
       scheduledAt,
-      userId: session.user.id
+      userId: userId
     });
 
     // Send notification immediately or schedule it
@@ -84,8 +85,9 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
     const limit = parseInt(searchParams.get('limit') || '20');
 
+    const userId = (session.user as any).id || session.user.email || 'anonymous';
     const notifications = await getNotifications({
-      userId: session.user.id,
+      userId: userId,
       jobId,
       propertyId,
       status,
@@ -219,19 +221,19 @@ async function generateEmailContent(notification: InvestorNotification): Promise
   
   switch (notification.type) {
     case 'new_deal':
-      html = await generateNewDealEmailHTML(notification);
+      html = generateNewDealEmailHTML(notification);
       break;
     case 'analysis_complete':
-      html = await generateAnalysisCompleteEmailHTML(notification);
+      html = generateAnalysisCompleteEmailHTML(notification);
       break;
     case 'price_change':
-      html = await generatePriceChangeEmailHTML(notification);
+      html = generatePriceChangeEmailHTML(notification);
       break;
     case 'market_update':
-      html = await generateMarketUpdateEmailHTML(notification);
+      html = generateMarketUpdateEmailHTML(notification);
       break;
     default:
-      html = await generateGenericEmailHTML(notification);
+      html = generateGenericEmailHTML(notification);
   }
 
   return {
@@ -240,7 +242,7 @@ async function generateEmailContent(notification: InvestorNotification): Promise
   };
 }
 
-async function generateNewDealEmailHTML(notification: InvestorNotification): Promise<string> {
+function generateNewDealEmailHTML(notification: InvestorNotification): string {
   return `
     <html>
       <head>
@@ -316,7 +318,7 @@ async function generateNewDealEmailHTML(notification: InvestorNotification): Pro
   `;
 }
 
-async function generateAnalysisCompleteEmailHTML(notification: InvestorNotification): Promise<string> {
+function generateAnalysisCompleteEmailHTML(notification: InvestorNotification): string {
   return `
     <html>
       <head>
@@ -366,7 +368,7 @@ async function generateAnalysisCompleteEmailHTML(notification: InvestorNotificat
   `;
 }
 
-async function generatePriceChangeEmailHTML(notification: InvestorNotification): Promise<string> {
+function generatePriceChangeEmailHTML(notification: InvestorNotification): string {
   return `
     <html>
       <head>
@@ -399,7 +401,7 @@ async function generatePriceChangeEmailHTML(notification: InvestorNotification):
   `;
 }
 
-async function generateMarketUpdateEmailHTML(notification: InvestorNotification): Promise<string> {
+function generateMarketUpdateEmailHTML(notification: InvestorNotification): string {
   return `
     <html>
       <head>
@@ -439,7 +441,7 @@ async function generateMarketUpdateEmailHTML(notification: InvestorNotification)
   `;
 }
 
-async function generateGenericEmailHTML(notification: InvestorNotification): Promise<string> {
+function generateGenericEmailHTML(notification: InvestorNotification): string {
   return `
     <html>
       <head>

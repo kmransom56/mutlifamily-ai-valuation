@@ -114,6 +114,11 @@ function processDocument(document: any) {
     confidence *= 0.85;
   }
 
+  // Mark as low quality if confidence drops below threshold
+  if (confidence < 0.75) {
+    quality = 'low';
+  }
+
   return {
     documentId: id,
     type,
@@ -299,8 +304,12 @@ function generateAnalysisInsights(data: any): string[] {
 }
 
 function calculateOverallQuality(results: any[]): 'high' | 'medium' | 'low' {
-  const scores = { high: 3, medium: 2, low: 1 };
-  const avgScore = results.reduce((sum, r) => sum + scores[r.quality], 0) / results.length;
+  type Quality = 'high' | 'medium' | 'low';
+  const scores: Record<Quality, number> = { high: 3, medium: 2, low: 1 };
+  const avgScore = results.reduce(
+    (sum, r: { quality: Quality }) => sum + scores[r.quality],
+    0
+  ) / results.length;
   
   if (avgScore >= 2.5) return 'high';
   if (avgScore >= 1.5) return 'medium';

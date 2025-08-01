@@ -164,7 +164,7 @@ export default function Phase3Dashboard({
         <TabsContent value="processing" className="space-y-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <ProcessingStatusPanel
-              jobId={jobId}
+              jobId={jobId || null}
               onStatusChange={handleStatusChange}
               onComplete={(results) => {
                 console.log('Processing completed:', results);

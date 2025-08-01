@@ -330,7 +330,7 @@ export interface DocumentAnnotation {
 // Investor notification types
 export interface InvestorNotification {
   id: string;
-  jobId: string;
+  jobId?: string;
   propertyId?: string;
   type: 'new_deal' | 'analysis_complete' | 'price_change' | 'market_update';
   recipients: InvestorRecipient[];
