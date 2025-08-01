@@ -1,0 +1,18 @@
+# Optional AI and NLP dependencies
+# Install these for enhanced AI features:
+# pip install -r requirements-ai.txt
+
+# OpenAI integration
+openai>=1.0.0
+
+# LangChain framework (optional)
+# langchain>=0.0.350
+
+# Vector search (optional)
+# faiss-cpu>=1.7.0
+
+# Natural language processing (optional)
+# spacy>=3.7.0
+
+# Machine learning (optional)  
+# scikit-learn>=1.3.0
