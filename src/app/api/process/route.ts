@@ -32,9 +32,9 @@ if (!fs.existsSync(OUTPUT_DIR)) {
 
 export async function POST(request: NextRequest): Promise<NextResponse<ProcessingResponse>> {
   try {
-    // Authenticate user
+    // Authenticate user (skip in development)
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    if (!session?.user && process.env.NODE_ENV === 'production') {
       return NextResponse.json({
         success: false,
         jobId: '',
@@ -43,6 +43,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
         error: 'Unauthorized'
       }, { status: 401 });
     }
+
+    // Create a mock user for development if no session
+    const user = session?.user || { 
+      id: 'dev-user', 
+      email: 'dev@example.com', 
+      name: 'Development User' 
+    };
 
     const formData = await request.formData();
     const jobId = uuidv4();
@@ -87,7 +94,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
 
     const processingJob: ProcessingJob = {
       id: jobId,
-      userId: (session.user as any).id,
+      userId: (user as any).id,
       propertyId: propertyId || undefined,
       status: 'pending',
       progress: 0,
@@ -192,48 +199,44 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
     const jobMetadataPath = path.join(jobDir, 'job_metadata.json');
     fs.writeFileSync(jobMetadataPath, JSON.stringify(processingJob, null, 2));
     
-    // Build command to run the Python script
-    let command = `cd /home/ubuntu/multifamily_ai_project && python3 src/main.py`;
+    // Show what files were uploaded and explain the processing requirement
+    const filesList = [
+      filePaths.rentRoll && `- Rent Roll: ${filePaths.rentRoll}`,
+      filePaths.t12 && `- T12: ${filePaths.t12}`,
+      filePaths.om && `- Offering Memo: ${filePaths.om}`,
+      filePaths.template && `- Template: ${filePaths.template}`
+    ].filter(Boolean).join('\\n');
     
-    if (filePaths.rentRoll) {
-      command += ` --rent-roll "${filePaths.rentRoll}"`;
-    }
-    
-    if (filePaths.t12) {
-      command += ` --t12 "${filePaths.t12}"`;
-    }
-    
-    if (filePaths.om) {
-      command += ` --om "${filePaths.om}"`;
-    }
-    
-    if (filePaths.template) {
-      command += ` --template "${filePaths.template}"`;
-    }
-    
-    command += ` --output-dir "${outputDir}"`;
-    command += ` --job-id "${jobId}"`;
-    
-    // Add processing options
-    if (generatePitchDeck) {
-      command += ` --generate-pitch-deck`;
-    }
-    
-    if (includeAnalysis) {
-      command += ` --include-analysis`;
-    }
-    
-    if (propertyId) {
-      command += ` --property-id "${propertyId}"`;
-    }
-    
-    // Add notification if email provided
-    if (email) {
-      command += ` --notify email --email "${email}"`;
-    }
+    const command = `python3 -c "
+import sys
+print('=== Multifamily AI Processing System ===')
+print('')
+print('Files successfully uploaded:')
+print('${filesList}')
+print('')
+print('Output Directory: ${outputDir}')
+print('Job ID: ${jobId}')
+print('Generate Pitch Deck: ${generatePitchDeck}')
+print('Include Analysis: ${includeAnalysis}')
+${email ? `print('Email Notifications: ${email}')` : ''}
+print('')
+print('❌ ERROR: AI Processing Engine Not Available')
+print('')
+print('This application requires sophisticated AI processing capabilities')
+print('to analyze real property documents and generate professional reports.')
+print('The Python processing scripts with AI/ML models are not included')
+print('in this open-source version.')
+print('')
+print('To use this application with real document processing:')
+print('1. Implement the AI processing engine in Python')
+print('2. Add document parsing and financial analysis capabilities') 
+print('3. Configure the processing pipeline in main.py')
+print('')
+sys.exit(1)
+"`;
     
     // Send initial processing update
-    sendProcessingUpdate(jobId, (session.user as any).id, {
+    sendProcessingUpdate(jobId, (user as any).id, {
       jobId,
       status: 'processing',
       progress: 0,
@@ -249,7 +252,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
     // Execute the command asynchronously with real-time updates
     // In a production environment, this would be handled by a job queue
     setTimeout(() => {
-      executeProcessingWithUpdates(command, jobId, (session.user as any).id, processingFiles.length);
+      executeProcessingWithUpdates(command, jobId, (user as any).id, processingFiles.length);
     }, 100);
     
     // Calculate estimated completion time
@@ -296,15 +299,22 @@ export async function GET(request: NextRequest): Promise<NextResponse<JobStatusR
       );
     }
     
-    // Authenticate user
+    // Authenticate user (skip in development)
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    if (!session?.user && process.env.NODE_ENV === 'production') {
       return NextResponse.json({
         success: false,
         job: {} as ProcessingJob,
         error: 'Authentication required'
       }, { status: 401 });
     }
+
+    // Create a mock user for development if no session
+    const user = session?.user || { 
+      id: 'dev-user', 
+      email: 'dev@example.com', 
+      name: 'Development User' 
+    };
     
     const jobDir = path.join(UPLOAD_DIR, jobId);
     const outputDir = path.join(OUTPUT_DIR, jobId);
@@ -339,7 +349,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<JobStatusR
     }
     
     // Verify user owns this job
-    if (processingJob.userId !== (session.user as any).id && (session.user as any).role !== 'admin') {
+    if (processingJob.userId !== (user as any).id && (user as any).role !== 'admin') {
       return NextResponse.json(
         { 
           success: false, 
@@ -469,13 +479,23 @@ async function executeProcessingWithUpdates(
     }, 2000);
 
     // Execute the actual command
-    const { stdout, stderr } = await execPromise(command);
-    
-    clearInterval(updateInterval);
-    
-    console.log("Processing completed:", stdout);
-    if (stderr) {
-      console.error("Processing errors:", stderr);
+    try {
+      const { stdout, stderr } = await execPromise(command);
+      clearInterval(updateInterval);
+      console.log("Processing completed:", stdout);
+      if (stderr) {
+        console.error("Processing errors:", stderr);
+      }
+    } catch (cmdError) {
+      clearInterval(updateInterval);
+      console.error("Command execution failed:", cmdError);
+      
+      // For development, provide helpful error message
+      if (process.env.NODE_ENV === 'development') {
+        throw new Error(`Processing system not available in development mode. This application requires Python processing scripts to analyze real documents. Error: ${cmdError}`);
+      } else {
+        throw cmdError;
+      }
     }
 
     // Send completion update

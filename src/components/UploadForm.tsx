@@ -127,8 +127,8 @@ export default function UploadForm() {
         formData.append('investorGroupId', investorGroupId);
       }
 
-      // Submit form data to unified API
-      const response = await fetch('/api/process-complete', {
+      // Submit form data to processing API
+      const response = await fetch('/api/process', {
         method: 'POST',
         body: formData,
       });
