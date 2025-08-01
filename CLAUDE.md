@@ -36,7 +36,7 @@ This is a **Next.js 15** multifamily property valuation application using the **
 - **Backend**: Next.js API Routes, NextAuth.js, WebSockets
 - **Database**: PostgreSQL (production), Redis (sessions/cache)
 - **Infrastructure**: Docker, Docker Compose, Nginx (reverse proxy)
-- **AI/Processing**: MCP (Model Context Protocol), Python integration
+- **AI/Processing**: Python AI processing system, OpenAI integration, Document analysis, Financial modeling
 
 ### Key Directories
 ```
@@ -62,6 +62,18 @@ src/
 ├── lib/                   # Utility libraries (8 files)
 ├── types/                 # TypeScript definitions
 └── globals.css           # Tailwind CSS with custom CSS variables
+
+ai_processing/             # Python AI processing system
+├── src/                   # Python source code
+│   ├── main.py           # Main processing pipeline entry point
+│   ├── document_processor.py # PDF/Excel document parsing
+│   ├── ai_analyzer.py    # AI-powered document analysis
+│   ├── financial_modeler.py # Financial modeling and projections
+│   ├── report_generator.py # Multi-format report generation
+│   └── utils/            # Utility modules (logging, config)
+├── config.json           # Processing configuration
+├── requirements.txt      # Python dependencies
+└── venv/                 # Python virtual environment
 ```
 
 ## Core API Patterns
@@ -90,6 +102,52 @@ src/
 ### Real-time Features
 - `/api/websocket` - WebSocket connections for live updates
 - `/api/investor-notifications` - Email notification system
+
+## AI Processing System
+
+The Python AI processing system analyzes multifamily property documents and generates comprehensive reports.
+
+### Processing Pipeline
+1. **Document Processing** (`document_processor.py`)
+   - PDF parsing using pdfplumber and PyPDF2
+   - Excel parsing with pandas and openpyxl
+   - Rent roll, T12, and offering memo extraction
+
+2. **AI Analysis** (`ai_analyzer.py`)
+   - OpenAI integration for document insights
+   - Unit mix and rent analysis
+   - Occupancy and financial performance analysis
+   - Risk assessment and investment grading
+
+3. **Financial Modeling** (`financial_modeler.py`)
+   - Multi-year investment projections
+   - Cash flow analysis with growth assumptions
+   - Returns analysis (cap rates, NOI, appreciation)
+   - Sensitivity analysis for key variables
+
+4. **Report Generation** (`report_generator.py`)
+   - Excel workbooks with financial models
+   - PDF executive summaries
+   - PowerPoint pitch decks
+   - JSON data exports
+
+### Configuration
+- Set `OPENAI_API_KEY` environment variable for AI features
+- Configure financial assumptions in `ai_processing/config.json`
+- Install dependencies: `pip install -r ai_processing/requirements.txt`
+
+### Usage
+```bash
+cd ai_processing
+source venv/bin/activate
+python3 src/main.py --rent-roll path/to/rent_roll.xlsx \
+                    --t12 path/to/t12.pdf \
+                    --om path/to/offering_memo.pdf \
+                    --output-dir /path/to/output \
+                    --job-id unique-job-id \
+                    --generate-pitch-deck \
+                    --include-analysis
+```
 
 ## Data Models
 

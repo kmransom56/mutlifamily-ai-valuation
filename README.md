@@ -42,10 +42,11 @@ A comprehensive, AI-powered platform for analyzing and valuing multifamily real 
 - **File System**: Document storage and processing
 
 ### AI & Processing
-- **Python Integration**: Advanced analysis engine
-- **MCP (Model Context Protocol)**: AI processing capabilities
-- **Document AI**: Text extraction and analysis
-- **Financial Modeling**: Investment calculations
+- **Python AI Engine**: Complete document processing and analysis system
+- **OpenAI Integration**: Advanced AI-powered document insights and analysis
+- **Document Processing**: PDF and Excel parsing with intelligent data extraction
+- **Financial Modeling**: Multi-year projections, cash flow analysis, and returns modeling
+- **Report Generation**: Professional Excel, PDF, and PowerPoint outputs
 
 ## 📦 Installation
 
@@ -72,6 +73,8 @@ Then open: http://localhost:3000
 **Prerequisites for Docker:**
 - Docker Desktop installed ([Download here](https://www.docker.com/products/docker-desktop/))
 - 4GB+ RAM available
+- Python 3.8+ (for AI processing system)
+- OpenAI API key (optional, for enhanced AI features)
 
 **Management commands:**
 ```bash
@@ -89,8 +92,9 @@ npm run docker:down   # Stop all services
 
 **Prerequisites:**
 - Node.js 18+ and npm
-- Python 3.8+ (for backend processing)
+- Python 3.8+ (for AI processing system)
 - Google Cloud Project (for Drive integration)
+- OpenAI API key (optional, for enhanced AI features)
 
 **Setup:**
 
@@ -129,8 +133,70 @@ npm run docker:down   # Stop all services
    npm run dev
    ```
 
-5. **Access the application**
+5. **Set up AI Processing System**
+   ```bash
+   cd ai_processing
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   pip install -r requirements.txt
+   ```
+
+6. **Configure AI Processing (Optional)**
+   ```bash
+   # Set OpenAI API key for enhanced AI features
+   export OPENAI_API_KEY=your-openai-api-key
+   
+   # Or add to .env.local
+   echo "OPENAI_API_KEY=your-openai-api-key" >> .env.local
+   ```
+
+7. **Access the application**
    Open [http://localhost:3000](http://localhost:3000) in your browser
+
+## 🤖 AI Processing System
+
+The application includes a sophisticated Python-based AI processing system that analyzes multifamily property documents and generates professional reports.
+
+### Features
+- **Document Processing**: Intelligent parsing of PDFs and Excel files
+- **AI Analysis**: OpenAI-powered insights on property performance and market positioning
+- **Financial Modeling**: Multi-year projections with configurable assumptions
+- **Report Generation**: Professional Excel workbooks, PDF summaries, and PowerPoint pitch decks
+
+### Setup
+```bash
+cd ai_processing
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+### Configuration
+Edit `ai_processing/config.json` to customize:
+- Financial assumptions (hold period, cap rates, growth rates)
+- Processing timeouts and file size limits
+- Report generation options
+
+### Usage
+The AI system is automatically invoked when you upload documents through the web interface. For direct usage:
+
+```bash
+cd ai_processing
+source venv/bin/activate
+python3 src/main.py --rent-roll path/to/rent_roll.xlsx \
+                    --t12 path/to/t12.pdf \
+                    --om path/to/offering_memo.pdf \
+                    --output-dir /path/to/output \
+                    --job-id unique-job-id \
+                    --generate-pitch-deck \
+                    --include-analysis
+```
+
+### Generated Reports
+- `integratedData.json` - Complete analysis data
+- `populatedTemplate.xlsx` - Financial analysis workbook with projections
+- `analysisReport.pdf` - Executive summary report
+- `pitchDeck.pptx` - Professional investor presentation
 
 ## 🔧 Configuration
 
@@ -155,10 +221,10 @@ src/
 │   ├── api/               # API routes
 │   │   ├── auth/          # Authentication endpoints
 │   │   ├── properties/    # Property management
-│   │   ├── process/       # Document processing
+│   │   ├── process/       # Document processing pipeline
 │   │   ├── export/        # Multi-format exports
 │   │   ├── websocket/     # Real-time updates
-│   │   └── mcp/          # AI processing
+│   │   └── mcp/          # AI processing integration
 │   ├── dashboard/         # Dashboard pages
 │   ├── properties/        # Property management
 │   └── calculator/        # Financial calculators
@@ -174,6 +240,20 @@ src/
 ├── lib/                   # Utility functions
 ├── types/                 # TypeScript definitions
 └── styles/               # Global styles
+
+ai_processing/             # Python AI Processing System
+├── src/                   # Python source code
+│   ├── main.py           # Main processing pipeline entry point
+│   ├── document_processor.py # PDF and Excel document parsing
+│   ├── ai_analyzer.py    # AI-powered document analysis engine
+│   ├── financial_modeler.py # Financial modeling and projections
+│   ├── report_generator.py # Multi-format report generation
+│   └── utils/            # Utility modules
+│       ├── logger.py     # Logging configuration
+│       └── config.py     # Configuration management
+├── config.json           # AI processing configuration
+├── requirements.txt      # Python dependencies
+└── venv/                 # Python virtual environment
 ```
 
 ## 🏗️ Architecture
@@ -305,6 +385,9 @@ NEXTAUTH_URL=https://yourdomain.com
 NEXTAUTH_SECRET=your-secure-32-character-production-secret
 GOOGLE_CLIENT_ID=production-client-id
 GOOGLE_CLIENT_SECRET=production-client-secret
+
+# AI Processing (Optional but recommended)
+OPENAI_API_KEY=your-openai-api-key
 
 # Database (Docker automatic)
 DATABASE_URL=postgresql://user:password@postgres:5432/multifamily_db

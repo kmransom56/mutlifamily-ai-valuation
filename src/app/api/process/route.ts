@@ -207,33 +207,35 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
       filePaths.template && `- Template: ${filePaths.template}`
     ].filter(Boolean).join('\\n');
     
-    const command = `python3 -c "
-import sys
-print('=== Multifamily AI Processing System ===')
-print('')
-print('Files successfully uploaded:')
-print('${filesList}')
-print('')
-print('Output Directory: ${outputDir}')
-print('Job ID: ${jobId}')
-print('Generate Pitch Deck: ${generatePitchDeck}')
-print('Include Analysis: ${includeAnalysis}')
-${email ? `print('Email Notifications: ${email}')` : ''}
-print('')
-print('❌ ERROR: AI Processing Engine Not Available')
-print('')
-print('This application requires sophisticated AI processing capabilities')
-print('to analyze real property documents and generate professional reports.')
-print('The Python processing scripts with AI/ML models are not included')
-print('in this open-source version.')
-print('')
-print('To use this application with real document processing:')
-print('1. Implement the AI processing engine in Python')
-print('2. Add document parsing and financial analysis capabilities') 
-print('3. Configure the processing pipeline in main.py')
-print('')
-sys.exit(1)
-"`;
+    // Build command to run Python processing system
+    const aiProcessingDir = path.join(process.cwd(), 'ai_processing');
+    const mainScript = path.join(aiProcessingDir, 'src', 'main.py');
+    
+    // Check if AI processing system exists
+    if (!fs.existsSync(mainScript)) {
+      return NextResponse.json({
+        success: false,
+        jobId: '',
+        message: 'AI processing system not found. Please install the Python processing environment.',
+        statusUrl: '',
+        error: 'Processing system not available'
+      }, { status: 500 });
+    }
+    
+    // Build command arguments
+    const args = [
+      `--output-dir "${outputDir}"`,
+      `--job-id "${jobId}"`,
+      propertyId ? `--property-id "${propertyId}"` : '',
+      filePaths.rentRoll ? `--rent-roll "${filePaths.rentRoll}"` : '',
+      filePaths.t12 ? `--t12 "${filePaths.t12}"` : '',
+      filePaths.om ? `--om "${filePaths.om}"` : '',
+      filePaths.template ? `--template "${filePaths.template}"` : '',
+      generatePitchDeck ? '--generate-pitch-deck' : '',
+      includeAnalysis ? '--include-analysis' : ''
+    ].filter(Boolean).join(' ');
+    
+    const command = `cd "${aiProcessingDir}" && python3 "${mainScript}" ${args}`;
     
     // Send initial processing update
     sendProcessingUpdate(jobId, (user as any).id, {
@@ -368,48 +370,58 @@ export async function GET(request: NextRequest): Promise<NextResponse<JobStatusR
     if (fs.existsSync(outputDir)) {
       const files = fs.readdirSync(outputDir);
       
-      // Check for specific output files
-      const integratedDataPath = path.join(outputDir, 'integrated_data.json');
-      const analysisDataPath = path.join(outputDir, 'analysis_data.json');
-      const errorPath = path.join(outputDir, 'error.log');
-      const populatedTemplateFile = files.find(file => file.startsWith('populated_'));
-      const pitchDeckFile = files.find(file => file.endsWith('.pptx') || file.endsWith('.pdf'));
+      // Check for specific output files from Python processing system
+      const integratedDataPath = path.join(outputDir, 'integratedData.json');
+      const populatedTemplatePath = path.join(outputDir, 'populatedTemplate.xlsx');
+      const analysisReportPath = path.join(outputDir, 'analysisReport.pdf');
+      const pitchDeckPath = path.join(outputDir, 'pitchDeck.pptx');
+      const processingResultsPath = path.join(outputDir, 'processing_results.json');
+      const errorDetailsPath = path.join(outputDir, 'error_details.json');
       
       // Check for errors
-      if (fs.existsSync(errorPath)) {
+      if (fs.existsSync(errorDetailsPath)) {
         currentStatus = 'failed';
-        processingJob.error = fs.readFileSync(errorPath, 'utf-8');
+        try {
+          const errorDetails = JSON.parse(fs.readFileSync(errorDetailsPath, 'utf-8'));
+          processingJob.error = errorDetails.error;
+        } catch {
+          processingJob.error = 'Processing failed with unknown error';
+        }
         processingJob.failedAt = new Date().toISOString();
       } else {
         // Calculate progress based on completed files
         if (fs.existsSync(integratedDataPath)) {
           progress = Math.max(progress, 40);
-          downloadUrls.integratedData = `/api/files?jobId=${jobId}&file=integrated_data.json`;
+          downloadUrls.integratedData = `/api/files?jobId=${jobId}&file=integratedData.json`;
         }
         
-        if (fs.existsSync(analysisDataPath)) {
-          progress = Math.max(progress, 70);
-          downloadUrls.analysisData = `/api/files?jobId=${jobId}&file=analysis_data.json`;
+        if (fs.existsSync(populatedTemplatePath)) {
+          progress = Math.max(progress, 65);
+          downloadUrls.populatedTemplate = `/api/files?jobId=${jobId}&file=populatedTemplate.xlsx`;
         }
         
-        if (populatedTemplateFile) {
-          progress = Math.max(progress, 85);
-          downloadUrls.populatedTemplate = `/api/files?jobId=${jobId}&file=${populatedTemplateFile}`;
+        if (fs.existsSync(analysisReportPath)) {
+          progress = Math.max(progress, 80);
+          downloadUrls.analysisReport = `/api/files?jobId=${jobId}&file=analysisReport.pdf`;
         }
         
-        if (pitchDeckFile) {
+        if (fs.existsSync(pitchDeckPath)) {
           progress = Math.max(progress, 95);
-          downloadUrls.pitchDeck = `/api/files?jobId=${jobId}&file=${pitchDeckFile}`;
+          downloadUrls.pitchDeck = `/api/files?jobId=${jobId}&file=pitchDeck.pptx`;
         }
         
-        // Check if all expected outputs are complete
-        const expectedFiles = [integratedDataPath, analysisDataPath];
-        if (populatedTemplateFile) expectedFiles.push(path.join(outputDir, populatedTemplateFile));
-        
-        if (expectedFiles.every(filePath => fs.existsSync(filePath))) {
-          currentStatus = 'completed';
-          progress = 100;
-          processingJob.completedAt = new Date().toISOString();
+        // Check if processing completed successfully
+        if (fs.existsSync(processingResultsPath)) {
+          try {
+            const results = JSON.parse(fs.readFileSync(processingResultsPath, 'utf-8'));
+            if (results.status === 'completed') {
+              currentStatus = 'completed';
+              progress = 100;
+              processingJob.completedAt = new Date().toISOString();
+            }
+          } catch {
+            // Continue with file-based progress calculation
+          }
         }
       }
       

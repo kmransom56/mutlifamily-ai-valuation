@@ -1,0 +1,19 @@
+{
+  "openai_api_key": null,
+  "log_level": "INFO",
+  "financial_assumptions": {
+    "hold_period": 5,
+    "exit_cap_rate": 0.065,
+    "annual_rent_growth": 0.03,
+    "annual_expense_growth": 0.025,
+    "vacancy_rate": 0.05,
+    "management_fee": 0.05,
+    "capital_reserve": 0.02,
+    "discount_rate": 0.10
+  },
+  "processing": {
+    "max_file_size_mb": 50,
+    "timeout_seconds": 300,
+    "temp_dir": "/tmp/multifamily_processing"
+  }
+}
