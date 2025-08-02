@@ -10,18 +10,19 @@ import re
 from typing import Dict, List, Optional, Any, Tuple
 from datetime import datetime
 import numpy as np
+import hashlib
+import pickle
 
 try:
     import openai
     from langchain.text_splitter import RecursiveCharacterTextSplitter
-    from langchain.embeddings import OpenAIEmbeddings
-    from langchain.vectorstores import FAISS
+    from langchain_openai import OpenAIEmbeddings, ChatOpenAI
+    from langchain_community.vectorstores import FAISS
     from langchain.chains import RetrievalQA
-    from langchain.llms import OpenAI
     OPENAI_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     OPENAI_AVAILABLE = False
-    logging.warning("OpenAI/LangChain not available. Using fallback analysis.")
+    logging.warning(f"OpenAI/LangChain not available: {e}. Using fallback analysis.")
 
 try:
     import spacy
@@ -41,10 +42,23 @@ class AIAnalyzer:
         self.openai_available = OPENAI_AVAILABLE and config.get('openai_api_key')
         self.spacy_available = SPACY_AVAILABLE
         
+        # Caching configuration
+        self.cache_enabled = config.get('processing', {}).get('enable_caching', True)
+        self.cache_ttl_hours = config.get('processing', {}).get('cache_ttl_hours', 24)
+        self.cache_dir = config.get('processing', {}).get('cache_dir', '.cache')
+        
+        if self.cache_enabled:
+            os.makedirs(self.cache_dir, exist_ok=True)
+        
         if self.openai_available:
-            openai.api_key = config.get('openai_api_key')
-            self.embeddings = OpenAIEmbeddings(openai_api_key=config.get('openai_api_key'))
-            self.llm = OpenAI(temperature=0.1, openai_api_key=config.get('openai_api_key'))
+            api_key = config.get('openai_api_key')
+            if api_key:
+                self.client = openai.OpenAI(api_key=api_key)
+                self.embeddings = OpenAIEmbeddings(api_key=api_key)
+                self.llm = ChatOpenAI(temperature=0.1, api_key=api_key, model="gpt-3.5-turbo")
+            else:
+                self.openai_available = False
+                self.logger.warning("OpenAI API key not provided in config")
         
         if self.spacy_available:
             try:
@@ -52,6 +66,87 @@ class AIAnalyzer:
             except OSError:
                 self.spacy_available = False
                 self.logger.warning("spaCy English model not found. Using basic analysis.")
+    
+    def _generate_cache_key(self, data: Any) -> str:
+        """Generate a unique cache key for the given data"""
+        # Create a string representation of the data
+        data_str = json.dumps(data, sort_keys=True, default=str)
+        # Generate hash
+        return hashlib.md5(data_str.encode()).hexdigest()
+    
+    def _get_cache_file_path(self, cache_key: str) -> str:
+        """Get the file path for a cache key"""
+        return os.path.join(self.cache_dir, f"{cache_key}.cache")
+    
+    def _is_cache_valid(self, cache_file: str) -> bool:
+        """Check if cache file is still valid based on TTL"""
+        if not os.path.exists(cache_file):
+            return False
+        
+        # Check file age
+        file_age_hours = (datetime.now().timestamp() - os.path.getmtime(cache_file)) / 3600
+        return file_age_hours < self.cache_ttl_hours
+    
+    def _load_from_cache(self, cache_key: str) -> Optional[Dict[str, Any]]:
+        """Load analysis results from cache"""
+        if not self.cache_enabled:
+            return None
+        
+        cache_file = self._get_cache_file_path(cache_key)
+        
+        if self._is_cache_valid(cache_file):
+            try:
+                with open(cache_file, 'rb') as f:
+                    cached_data = pickle.load(f)
+                self.logger.info(f"Loaded analysis from cache: {cache_key[:8]}...")
+                return cached_data
+            except Exception as e:
+                self.logger.warning(f"Failed to load cache: {e}")
+                # Remove corrupted cache file
+                try:
+                    os.remove(cache_file)
+                except:
+                    pass
+        
+        return None
+    
+    def _save_to_cache(self, cache_key: str, data: Dict[str, Any]) -> None:
+        """Save analysis results to cache"""
+        if not self.cache_enabled:
+            return
+        
+        cache_file = self._get_cache_file_path(cache_key)
+        
+        try:
+            with open(cache_file, 'wb') as f:
+                pickle.dump(data, f)
+            self.logger.info(f"Saved analysis to cache: {cache_key[:8]}...")
+        except Exception as e:
+            self.logger.warning(f"Failed to save to cache: {e}")
+    
+    def _clean_old_cache(self) -> None:
+        """Clean up old cache files"""
+        if not self.cache_enabled or not os.path.exists(self.cache_dir):
+            return
+        
+        try:
+            current_time = datetime.now().timestamp()
+            cleaned_count = 0
+            
+            for filename in os.listdir(self.cache_dir):
+                if filename.endswith('.cache'):
+                    file_path = os.path.join(self.cache_dir, filename)
+                    file_age_hours = (current_time - os.path.getmtime(file_path)) / 3600
+                    
+                    if file_age_hours > self.cache_ttl_hours:
+                        os.remove(file_path)
+                        cleaned_count += 1
+            
+            if cleaned_count > 0:
+                self.logger.info(f"Cleaned {cleaned_count} old cache files")
+                
+        except Exception as e:
+            self.logger.warning(f"Failed to clean cache: {e}")
     
     def analyze_documents(self, documents: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -63,6 +158,17 @@ class AIAnalyzer:
         Returns:
             Dictionary containing AI insights and analysis
         """
+        
+        # Clean old cache files first
+        self._clean_old_cache()
+        
+        # Check if we have cached results
+        cache_key = self._generate_cache_key(documents)
+        cached_result = self._load_from_cache(cache_key)
+        
+        if cached_result:
+            self.logger.info("Using cached analysis results")
+            return cached_result
         
         self.logger.info("Starting AI analysis of documents")
         
@@ -98,6 +204,9 @@ class AIAnalyzer:
         
         # Generate comprehensive insights
         analysis_results['summary'] = self._generate_investment_summary(analysis_results)
+        
+        # Cache the results
+        self._save_to_cache(cache_key, analysis_results)
         
         self.logger.info("AI analysis completed")
         return analysis_results
@@ -561,8 +670,8 @@ class AIAnalyzer:
             Provide 3-4 key insights about this property's rental performance.
             """
             
-            response = openai.Completion.create(
-                engine="gpt-3.5-turbo-instruct",
+            response = self.client.completions.create(
+                model="gpt-3.5-turbo-instruct",
                 prompt=prompt,
                 max_tokens=200,
                 temperature=0.1
@@ -589,8 +698,8 @@ class AIAnalyzer:
             Provide 3-4 key insights about the financial performance.
             """
             
-            response = openai.Completion.create(
-                engine="gpt-3.5-turbo-instruct",
+            response = self.client.completions.create(
+                model="gpt-3.5-turbo-instruct",
                 prompt=prompt,
                 max_tokens=200,
                 temperature=0.1
@@ -618,8 +727,8 @@ class AIAnalyzer:
             Provide a concise summary focusing on investment highlights and key property details.
             """
             
-            response = openai.Completion.create(
-                engine="gpt-3.5-turbo-instruct",
+            response = self.client.completions.create(
+                model="gpt-3.5-turbo-instruct",
                 prompt=prompt,
                 max_tokens=300,
                 temperature=0.1

@@ -4,10 +4,13 @@ pdfplumber
 pandas
 openpyxl
 
-# AI and NLP (optional - install manually if needed)
-# openai
-# langchain
-# spacy
+# AI and NLP (essential for AI processing)
+openai>=1.0.0
+langchain>=0.1.0
+langchain-openai>=0.1.0
+langchain-community>=0.0.20
+spacy>=3.7.0
+tiktoken>=0.5.0
 
 # Report generation (tested and working)
 reportlab
@@ -19,3 +22,5 @@ numpy
 # Utilities
 python-dotenv
 requests
+aiofiles
+asyncio

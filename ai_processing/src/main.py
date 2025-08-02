@@ -20,7 +20,7 @@ from document_processor import DocumentProcessor
 from ai_analyzer import AIAnalyzer
 from financial_modeler import FinancialModeler
 from report_generator import ReportGenerator
-from utils.logger import setup_logger
+from utils.logger import setup_logger, create_processing_monitor
 from utils.config import load_config
 
 class MultifamilyProcessor:
@@ -66,75 +66,87 @@ class MultifamilyProcessor:
         
         self.logger.info(f"Starting property analysis for job {job_id}")
         
-        try:
-            # Step 1: Document Processing
-            self.logger.info("Step 1: Processing documents...")
-            documents = self.document_processor.process_documents({
-                'rent_roll': rent_roll_path,
-                't12': t12_path,
-                'offering_memo': offering_memo_path,
-                'template': template_path
-            })
-            
-            # Step 2: AI Analysis
-            self.logger.info("Step 2: Running AI analysis...")
-            ai_insights = self.ai_analyzer.analyze_documents(documents)
-            
-            # Step 3: Financial Modeling
-            self.logger.info("Step 3: Building financial models...")
-            financial_analysis = self.financial_modeler.create_models(
-                documents, ai_insights
-            )
-            
-            # Step 4: Generate Reports
-            self.logger.info("Step 4: Generating reports...")
-            reports = self.report_generator.generate_reports(
-                documents=documents,
-                ai_insights=ai_insights,
-                financial_analysis=financial_analysis,
-                output_dir=output_dir,
-                job_id=job_id,
-                generate_pitch_deck=generate_pitch_deck,
-                include_analysis=include_analysis
-            )
-            
-            # Compile results
-            results = {
-                'job_id': job_id,
-                'property_id': property_id,
-                'status': 'completed',
-                'processed_at': datetime.now().isoformat(),
-                'documents_processed': len([p for p in [rent_roll_path, t12_path, offering_memo_path, template_path] if p]),
-                'ai_insights': ai_insights,
-                'financial_analysis': financial_analysis,
-                'reports_generated': reports,
-                'output_directory': output_dir
-            }
-            
-            # Save results summary
-            results_path = os.path.join(output_dir, 'processing_results.json')
-            with open(results_path, 'w') as f:
-                json.dump(results, f, indent=2, default=str)
-            
-            self.logger.info(f"Property analysis completed successfully for job {job_id}")
-            return results
-            
-        except Exception as e:
-            self.logger.error(f"Error processing property: {str(e)}")
-            error_result = {
-                'job_id': job_id,
-                'status': 'failed',
-                'error': str(e),
-                'processed_at': datetime.now().isoformat()
-            }
-            
-            # Save error details
-            error_path = os.path.join(output_dir, 'error_details.json')
-            os.makedirs(output_dir, exist_ok=True)
-            with open(error_path, 'w') as f:
-                json.dump(error_result, f, indent=2)
+        with create_processing_monitor(job_id, os.path.join(output_dir, "logs")) as monitor:
+            try:
+                # Step 1: Document Processing
+                with monitor.track_operation("document_processing", file_count=len([p for p in [rent_roll_path, t12_path, offering_memo_path, template_path] if p])):
+                    self.logger.info("Step 1: Processing documents...")
+                    documents = self.document_processor.process_documents({
+                        'rent_roll': rent_roll_path,
+                        't12': t12_path,
+                        'offering_memo': offering_memo_path,
+                        'template': template_path
+                    })
+                    
+                    # Track file processing results
+                    for doc_type, file_path in [('rent_roll', rent_roll_path), ('t12', t12_path), ('offering_memo', offering_memo_path), ('template', template_path)]:
+                        if file_path:
+                            success = documents.get(doc_type) is not None
+                            monitor.track_file_processing(file_path, doc_type, success)
                 
-            raise e
+                # Step 2: AI Analysis
+                with monitor.track_operation("ai_analysis", ai_enabled=hasattr(self.ai_analyzer, 'openai_available') and self.ai_analyzer.openai_available):
+                    self.logger.info("Step 2: Running AI analysis...")
+                    ai_insights = self.ai_analyzer.analyze_documents(documents)
+                
+                # Step 3: Financial Modeling
+                with monitor.track_operation("financial_modeling"):
+                    self.logger.info("Step 3: Building financial models...")
+                    financial_analysis = self.financial_modeler.create_models(
+                        documents, ai_insights
+                    )
+                
+                # Step 4: Generate Reports
+                with monitor.track_operation("report_generation", generate_pitch_deck=generate_pitch_deck):
+                    self.logger.info("Step 4: Generating reports...")
+                    reports = self.report_generator.generate_reports(
+                        documents=documents,
+                        ai_insights=ai_insights,
+                        financial_analysis=financial_analysis,
+                        output_dir=output_dir,
+                        job_id=job_id,
+                        generate_pitch_deck=generate_pitch_deck,
+                        include_analysis=include_analysis
+                    )
+            
+                # Compile results
+                results = {
+                    'job_id': job_id,
+                    'property_id': property_id,
+                    'status': 'completed',
+                    'processed_at': datetime.now().isoformat(),
+                    'documents_processed': len([p for p in [rent_roll_path, t12_path, offering_memo_path, template_path] if p]),
+                    'ai_insights': ai_insights,
+                    'financial_analysis': financial_analysis,
+                    'reports_generated': reports,
+                    'output_directory': output_dir,
+                    'monitoring_report': monitor.generate_report()
+                }
+                
+                # Save results summary
+                results_path = os.path.join(output_dir, 'processing_results.json')
+                with open(results_path, 'w') as f:
+                    json.dump(results, f, indent=2, default=str)
+                
+                self.logger.info(f"Property analysis completed successfully for job {job_id}")
+                return results
+            
+            except Exception as e:
+                self.logger.error(f"Error processing property: {str(e)}")
+                error_result = {
+                    'job_id': job_id,
+                    'status': 'failed',
+                    'error': str(e),
+                    'processed_at': datetime.now().isoformat()
+                }
+                
+                # Save error details
+                error_path = os.path.join(output_dir, 'error_details.json')
+                os.makedirs(output_dir, exist_ok=True)
+                with open(error_path, 'w') as f:
+                    json.dump(error_result, f, indent=2)
+                    
+                raise e
 
 def main():
     """Main entry point for command line execution"""

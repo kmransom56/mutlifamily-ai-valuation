@@ -12,6 +12,10 @@ import logging
 import re
 from pathlib import Path
 import json
+import asyncio
+import aiofiles
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 
 class DocumentProcessor:
     """Processes various types of property documents"""
@@ -19,6 +23,267 @@ class DocumentProcessor:
     def __init__(self, config: Dict[str, Any]):
         self.config = config
         self.logger = logging.getLogger(__name__)
+        self.max_file_size_mb = config.get('processing', {}).get('max_file_size_mb', 50)
+        self.enable_async = config.get('processing', {}).get('enable_async', True)
+        self.max_workers = config.get('processing', {}).get('max_workers', 4)
+        self.chunk_size = config.get('processing', {}).get('chunk_size', 1000)
+        self.max_memory_mb = config.get('processing', {}).get('max_memory_mb', 512)
+    
+    def _chunk_text(self, text: str, chunk_size: Optional[int] = None) -> List[str]:
+        """
+        Split large text into manageable chunks for processing
+        
+        Args:
+            text: Text to chunk
+            chunk_size: Size of each chunk (defaults to config value)
+            
+        Returns:
+            List of text chunks
+        """
+        if not text:
+            return []
+        
+        chunk_size = chunk_size or self.chunk_size
+        
+        # If text is small, return as single chunk
+        if len(text) <= chunk_size:
+            return [text]
+        
+        chunks = []
+        # Split on paragraphs first, then sentences, then words
+        paragraphs = text.split('\n\n')
+        
+        current_chunk = ""
+        for paragraph in paragraphs:
+            # If single paragraph is too large, split it further
+            if len(paragraph) > chunk_size:
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                    current_chunk = ""
+                
+                # Split large paragraph by sentences
+                sentences = paragraph.split('. ')
+                for sentence in sentences:
+                    if len(current_chunk + sentence) > chunk_size:
+                        if current_chunk:
+                            chunks.append(current_chunk.strip())
+                        current_chunk = sentence + '. '
+                    else:
+                        current_chunk += sentence + '. '
+            else:
+                # Check if adding this paragraph exceeds chunk size
+                if len(current_chunk + paragraph) > chunk_size:
+                    if current_chunk:
+                        chunks.append(current_chunk.strip())
+                    current_chunk = paragraph + '\n\n'
+                else:
+                    current_chunk += paragraph + '\n\n'
+        
+        # Add remaining chunk
+        if current_chunk.strip():
+            chunks.append(current_chunk.strip())
+        
+        return chunks
+    
+    def _process_large_pdf_memory_optimized(self, file_path: str) -> Dict[str, Any]:
+        """
+        Process large PDF files with memory optimization
+        
+        Args:
+            file_path: Path to PDF file
+            
+        Returns:
+            Processed document data
+        """
+        self.logger.info(f"Processing large PDF with memory optimization: {file_path}")
+        
+        text_chunks = []
+        tables = []
+        page_count = 0
+        
+        try:
+            # Process PDF page by page to manage memory
+            with pdfplumber.open(file_path) as pdf:
+                page_count = len(pdf.pages)
+                
+                for page_num, page in enumerate(pdf.pages):
+                    try:
+                        # Extract text from current page
+                        page_text = page.extract_text() or ""
+                        if page_text.strip():
+                            # Chunk the page text if it's large
+                            chunks = self._chunk_text(page_text)
+                            text_chunks.extend(chunks)
+                        
+                        # Extract tables from current page
+                        page_tables = page.extract_tables()
+                        if page_tables:
+                            tables.extend(page_tables)
+                        
+                        # Log progress for large documents
+                        if page_count > 10 and (page_num + 1) % 10 == 0:
+                            self.logger.info(f"Processed {page_num + 1}/{page_count} pages")
+                    
+                    except Exception as e:
+                        self.logger.warning(f"Error processing page {page_num + 1}: {e}")
+                        continue
+            
+            # Combine chunks with memory management
+            full_text = self._combine_chunks_safely(text_chunks)
+            
+            return {
+                'text': full_text,
+                'tables': tables,
+                'page_count': page_count,
+                'chunks_processed': len(text_chunks),
+                'memory_optimized': True
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error in memory-optimized PDF processing: {e}")
+            raise
+    
+    def _combine_chunks_safely(self, chunks: List[str]) -> str:
+        """
+        Safely combine text chunks with memory monitoring
+        
+        Args:
+            chunks: List of text chunks
+            
+        Returns:
+            Combined text
+        """
+        if not chunks:
+            return ""
+        
+        # For very large documents, sample key chunks instead of combining all
+        if len(chunks) > 100:  # Arbitrary threshold
+            self.logger.info(f"Large document with {len(chunks)} chunks, sampling key sections")
+            # Take first few, middle few, and last few chunks
+            selected_chunks = chunks[:10] + chunks[len(chunks)//2-5:len(chunks)//2+5] + chunks[-10:]
+            return "\n\n".join(selected_chunks)
+        
+        return "\n\n".join(chunks)
+    
+    def validate_file(self, file_path: str) -> Dict[str, Any]:
+        """
+        Validate file before processing
+        
+        Args:
+            file_path: Path to the file to validate
+            
+        Returns:
+            Dictionary with validation results
+        """
+        if not os.path.exists(file_path):
+            return {'valid': False, 'error': 'File does not exist'}
+        
+        try:
+            file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+            if file_size_mb > self.max_file_size_mb:
+                return {
+                    'valid': False, 
+                    'error': f'File size ({file_size_mb:.1f}MB) exceeds maximum ({self.max_file_size_mb}MB)'
+                }
+            
+            file_ext = Path(file_path).suffix.lower()
+            allowed_extensions = ['.pdf', '.xlsx', '.xls', '.xlsb', '.csv']
+            if file_ext not in allowed_extensions:
+                return {
+                    'valid': False,
+                    'error': f'File type {file_ext} not supported. Allowed: {allowed_extensions}'
+                }
+            
+            # Basic file integrity check
+            if file_size_mb < 0.001:  # Less than 1KB
+                return {'valid': False, 'error': 'File appears to be empty or corrupted'}
+            
+            return {
+                'valid': True,
+                'size_mb': file_size_mb,
+                'extension': file_ext,
+                'readable': os.access(file_path, os.R_OK)
+            }
+            
+        except Exception as e:
+            return {'valid': False, 'error': f'Validation error: {str(e)}'}
+    
+    async def process_documents_async(self, file_paths: Dict[str, Optional[str]]) -> Dict[str, Any]:
+        """
+        Process documents asynchronously for better performance
+        
+        Args:
+            file_paths: Dictionary of document types and their file paths
+            
+        Returns:
+            Dictionary containing parsed data from all documents
+        """
+        start_time = time.time()
+        
+        results = {
+            'rent_roll': None,
+            't12': None,
+            'offering_memo': None,
+            'template': None,
+            'metadata': {
+                'files_processed': [],
+                'processing_errors': [],
+                'validation_errors': [],
+                'processing_time_seconds': 0,
+                'async_enabled': True
+            }
+        }
+        
+        # Validate all files first
+        valid_files = {}
+        for doc_type, file_path in file_paths.items():
+            if file_path:
+                validation = self.validate_file(file_path)
+                if validation['valid']:
+                    valid_files[doc_type] = file_path
+                    self.logger.info(f"File validation passed for {doc_type}: {validation['size_mb']:.1f}MB")
+                else:
+                    error_msg = f"Validation failed for {doc_type}: {validation['error']}"
+                    self.logger.error(error_msg)
+                    results['metadata']['validation_errors'].append(error_msg)
+        
+        if not valid_files:
+            results['metadata']['processing_time_seconds'] = time.time() - start_time
+            return results
+        
+        # Process files concurrently
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            future_to_type = {}
+            
+            for doc_type, file_path in valid_files.items():
+                if doc_type == 'rent_roll':
+                    future = executor.submit(self.process_rent_roll, file_path)
+                elif doc_type == 't12':
+                    future = executor.submit(self.process_t12, file_path)
+                elif doc_type == 'offering_memo':
+                    future = executor.submit(self.process_offering_memo, file_path)
+                elif doc_type == 'template':
+                    future = executor.submit(self.process_template, file_path)
+                else:
+                    continue
+                
+                future_to_type[future] = doc_type
+            
+            # Collect results as they complete
+            for future in as_completed(future_to_type):
+                doc_type = future_to_type[future]
+                try:
+                    result = future.result()
+                    results[doc_type] = result
+                    results['metadata']['files_processed'].append(doc_type)
+                    self.logger.info(f"{doc_type} processed successfully")
+                except Exception as e:
+                    error_msg = f"Error processing {doc_type}: {str(e)}"
+                    self.logger.error(error_msg)
+                    results['metadata']['processing_errors'].append(error_msg)
+        
+        results['metadata']['processing_time_seconds'] = time.time() - start_time
+        return results
         
     def process_documents(self, file_paths: Dict[str, Optional[str]]) -> Dict[str, Any]:
         """
@@ -31,6 +296,16 @@ class DocumentProcessor:
             Dictionary containing parsed data from all documents
         """
         
+        # Use async processing if enabled and multiple files
+        if (self.enable_async and 
+            sum(1 for path in file_paths.values() if path) > 1):
+            try:
+                return asyncio.run(self.process_documents_async(file_paths))
+            except Exception as e:
+                self.logger.warning(f"Async processing failed, falling back to sync: {e}")
+        
+        # Fallback to synchronous processing
+        start_time = time.time()
         results = {
             'rent_roll': None,
             't12': None,
@@ -38,54 +313,82 @@ class DocumentProcessor:
             'template': None,
             'metadata': {
                 'files_processed': [],
-                'processing_errors': []
+                'processing_errors': [],
+                'validation_errors': [],
+                'processing_time_seconds': 0,
+                'async_enabled': False
             }
         }
         
         # Process rent roll
         if file_paths.get('rent_roll'):
-            try:
-                results['rent_roll'] = self.process_rent_roll(file_paths['rent_roll'])
-                results['metadata']['files_processed'].append('rent_roll')
-                self.logger.info("Rent roll processed successfully")
-            except Exception as e:
-                error_msg = f"Error processing rent roll: {str(e)}"
+            validation = self.validate_file(file_paths['rent_roll'])
+            if validation['valid']:
+                try:
+                    results['rent_roll'] = self.process_rent_roll(file_paths['rent_roll'])
+                    results['metadata']['files_processed'].append('rent_roll')
+                    self.logger.info("Rent roll processed successfully")
+                except Exception as e:
+                    error_msg = f"Error processing rent roll: {str(e)}"
+                    self.logger.error(error_msg)
+                    results['metadata']['processing_errors'].append(error_msg)
+            else:
+                error_msg = f"Validation failed for rent_roll: {validation['error']}"
                 self.logger.error(error_msg)
-                results['metadata']['processing_errors'].append(error_msg)
+                results['metadata']['validation_errors'].append(error_msg)
         
         # Process T12
         if file_paths.get('t12'):
-            try:
-                results['t12'] = self.process_t12(file_paths['t12'])
-                results['metadata']['files_processed'].append('t12')
-                self.logger.info("T12 statement processed successfully")
-            except Exception as e:
-                error_msg = f"Error processing T12: {str(e)}"
+            validation = self.validate_file(file_paths['t12'])
+            if validation['valid']:
+                try:
+                    results['t12'] = self.process_t12(file_paths['t12'])
+                    results['metadata']['files_processed'].append('t12')
+                    self.logger.info("T12 statement processed successfully")
+                except Exception as e:
+                    error_msg = f"Error processing T12: {str(e)}"
+                    self.logger.error(error_msg)
+                    results['metadata']['processing_errors'].append(error_msg)
+            else:
+                error_msg = f"Validation failed for t12: {validation['error']}"
                 self.logger.error(error_msg)
-                results['metadata']['processing_errors'].append(error_msg)
+                results['metadata']['validation_errors'].append(error_msg)
         
         # Process offering memo
         if file_paths.get('offering_memo'):
-            try:
-                results['offering_memo'] = self.process_offering_memo(file_paths['offering_memo'])
-                results['metadata']['files_processed'].append('offering_memo')
-                self.logger.info("Offering memorandum processed successfully")
-            except Exception as e:
-                error_msg = f"Error processing offering memo: {str(e)}"
+            validation = self.validate_file(file_paths['offering_memo'])
+            if validation['valid']:
+                try:
+                    results['offering_memo'] = self.process_offering_memo(file_paths['offering_memo'])
+                    results['metadata']['files_processed'].append('offering_memo')
+                    self.logger.info("Offering memorandum processed successfully")
+                except Exception as e:
+                    error_msg = f"Error processing offering memo: {str(e)}"
+                    self.logger.error(error_msg)
+                    results['metadata']['processing_errors'].append(error_msg)
+            else:
+                error_msg = f"Validation failed for offering_memo: {validation['error']}"
                 self.logger.error(error_msg)
-                results['metadata']['processing_errors'].append(error_msg)
+                results['metadata']['validation_errors'].append(error_msg)
         
         # Process template
         if file_paths.get('template'):
-            try:
-                results['template'] = self.process_template(file_paths['template'])
-                results['metadata']['files_processed'].append('template')
-                self.logger.info("Template processed successfully")
-            except Exception as e:
-                error_msg = f"Error processing template: {str(e)}"
+            validation = self.validate_file(file_paths['template'])
+            if validation['valid']:
+                try:
+                    results['template'] = self.process_template(file_paths['template'])
+                    results['metadata']['files_processed'].append('template')
+                    self.logger.info("Template processed successfully")
+                except Exception as e:
+                    error_msg = f"Error processing template: {str(e)}"
+                    self.logger.error(error_msg)
+                    results['metadata']['processing_errors'].append(error_msg)
+            else:
+                error_msg = f"Validation failed for template: {validation['error']}"
                 self.logger.error(error_msg)
-                results['metadata']['processing_errors'].append(error_msg)
+                results['metadata']['validation_errors'].append(error_msg)
         
+        results['metadata']['processing_time_seconds'] = time.time() - start_time
         return results
     
     def process_rent_roll(self, file_path: str) -> Dict[str, Any]:
@@ -101,34 +404,48 @@ class DocumentProcessor:
             raise ValueError(f"Unsupported rent roll format: {file_ext}")
     
     def _process_rent_roll_pdf(self, file_path: str) -> Dict[str, Any]:
-        """Process PDF rent roll"""
+        """Process PDF rent roll with memory optimization for large files"""
         
-        with pdfplumber.open(file_path) as pdf:
-            text_content = ""
-            tables = []
-            
-            for page in pdf.pages:
-                # Extract text
-                page_text = page.extract_text()
-                if page_text:
-                    text_content += page_text + "\\n"
+        # Check if file is large and use memory optimization
+        file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
+        if file_size_mb > 10:  # Use memory optimization for files > 10MB
+            pdf_data = self._process_large_pdf_memory_optimized(file_path)
+            text_content = pdf_data['text']
+            tables = pdf_data['tables']
+            memory_optimized = True
+        else:
+            # Standard processing for smaller files
+            with pdfplumber.open(file_path) as pdf:
+                text_content = ""
+                tables = []
                 
-                # Extract tables
-                page_tables = page.extract_tables()
-                if page_tables:
-                    tables.extend(page_tables)
+                for page in pdf.pages:
+                    # Extract text
+                    page_text = page.extract_text()
+                    if page_text:
+                        text_content += page_text + "\\n"
+                    
+                    # Extract tables
+                    page_tables = page.extract_tables()
+                    if page_tables:
+                        tables.extend(page_tables)
+            memory_optimized = False
         
         # Parse rent roll data
         units = self._parse_rent_roll_data(text_content, tables)
         
-        return {
+        result = {
             'type': 'rent_roll',
             'format': 'pdf',
             'raw_text': text_content,
             'tables': tables,
             'units': units,
-            'summary': self._summarize_rent_roll(units)
+            'summary': self._summarize_rent_roll(units),
+            'memory_optimized': memory_optimized,
+            'file_size_mb': file_size_mb
         }
+        
+        return result
     
     def _process_rent_roll_excel(self, file_path: str) -> Dict[str, Any]:
         """Process Excel rent roll"""
