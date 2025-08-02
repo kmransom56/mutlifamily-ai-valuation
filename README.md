@@ -88,6 +88,43 @@ npm run docker:down   # Stop all services
 
 ---
 
+### 🤖 Automated Installation (Recommended)
+
+**One-command setup:**
+
+```bash
+# Clone and setup everything automatically
+git clone https://github.com/kmransom56/mutlifamily-ai-valuation.git
+cd mutlifamily-ai-valuation
+./setup.sh
+```
+
+**What the automated setup does:**
+- ✅ Checks all prerequisites (Node.js 18+, Python 3.8+)
+- ✅ Installs all Node.js dependencies
+- ✅ Creates Python virtual environment
+- ✅ Installs all Python AI processing dependencies
+- ✅ Creates and configures .env.local with secure defaults
+- ✅ Creates required directories (uploads, outputs)
+- ✅ Verifies installation and provides next steps
+
+**Start development server:**
+```bash
+# Quick start with automated setup check
+./start-dev.sh
+
+# Or manually
+PORT=11100 npm run dev
+```
+
+**Windows users:**
+```batch
+setup.bat       # Automated setup
+start-dev.bat   # Start development server
+```
+
+---
+
 ### 🛠️ Manual Installation (Advanced)
 
 **Prerequisites:**
@@ -197,6 +234,36 @@ python3 src/main.py --rent-roll path/to/rent_roll.xlsx \
 - `populatedTemplate.xlsx` - Financial analysis workbook with projections
 - `analysisReport.pdf` - Executive summary report
 - `pitchDeck.pptx` - Professional investor presentation
+
+## 🔧 Development Workflow
+
+### **Quick Start Commands:**
+```bash
+# Automated setup and start
+./setup.sh && ./start-dev.sh
+
+# Or step by step
+./setup.sh          # One-time setup
+./start-dev.sh       # Daily development startup
+```
+
+### **Available NPM Scripts:**
+```bash
+npm run dev:11100     # Start dev server on port 11100 (recommended)
+npm run setup         # Run automated setup script
+npm run setup:python  # Setup only Python environment
+npm run test:python   # Test Python AI system
+npm run build         # Build for production
+npm run start         # Start production server
+npm run lint          # Run ESLint
+npm run type-check    # Run TypeScript type checking
+```
+
+### **Windows Users:**
+```batch
+setup.bat           # Automated setup
+start-dev.bat       # Start development server
+```
 
 ## 🔧 Configuration
 
