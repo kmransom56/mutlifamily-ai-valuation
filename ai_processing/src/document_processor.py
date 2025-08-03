@@ -187,7 +187,7 @@ class DocumentProcessor:
                 }
             
             file_ext = Path(file_path).suffix.lower()
-            allowed_extensions = ['.pdf', '.xlsx', '.xls', '.xlsb', '.csv']
+            allowed_extensions = ['.pdf', '.xlsx', '.xls', '.xlsb', '.xltx', '.csv']
             if file_ext not in allowed_extensions:
                 return {
                     'valid': False,
@@ -398,7 +398,7 @@ class DocumentProcessor:
         
         if file_ext == '.pdf':
             return self._process_rent_roll_pdf(file_path)
-        elif file_ext in ['.xlsx', '.xls', '.xlsb']:
+        elif file_ext in ['.xlsx', '.xls', '.xlsb', '.xltx']:
             return self._process_rent_roll_excel(file_path)
         else:
             raise ValueError(f"Unsupported rent roll format: {file_ext}")
@@ -546,7 +546,7 @@ class DocumentProcessor:
         
         if file_ext == '.pdf':
             return self._process_t12_pdf(file_path)
-        elif file_ext in ['.xlsx', '.xls', '.xlsb']:
+        elif file_ext in ['.xlsx', '.xls', '.xlsb', '.xltx']:
             return self._process_t12_excel(file_path)
         else:
             raise ValueError(f"Unsupported T12 format: {file_ext}")

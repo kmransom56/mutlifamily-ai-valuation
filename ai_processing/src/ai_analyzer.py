@@ -69,8 +69,14 @@ class AIAnalyzer:
     
     def _generate_cache_key(self, data: Any) -> str:
         """Generate a unique cache key for the given data"""
+        def json_serializer(obj):
+            """Custom JSON serializer for datetime and other objects"""
+            if hasattr(obj, 'isoformat'):
+                return obj.isoformat()
+            return str(obj)
+        
         # Create a string representation of the data
-        data_str = json.dumps(data, sort_keys=True, default=str)
+        data_str = json.dumps(data, sort_keys=True, default=json_serializer)
         # Generate hash
         return hashlib.md5(data_str.encode()).hexdigest()
     
@@ -163,12 +169,15 @@ class AIAnalyzer:
         self._clean_old_cache()
         
         # Check if we have cached results
-        cache_key = self._generate_cache_key(documents)
-        cached_result = self._load_from_cache(cache_key)
-        
-        if cached_result:
-            self.logger.info("Using cached analysis results")
-            return cached_result
+        try:
+            cache_key = self._generate_cache_key(documents)
+            cached_result = self._load_from_cache(cache_key)
+            
+            if cached_result:
+                self.logger.info("Using cached analysis results")
+                return cached_result
+        except Exception as e:
+            self.logger.warning(f"Cache key generation failed, proceeding without cache: {e}")
         
         self.logger.info("Starting AI analysis of documents")
         
@@ -206,7 +215,11 @@ class AIAnalyzer:
         analysis_results['summary'] = self._generate_investment_summary(analysis_results)
         
         # Cache the results
-        self._save_to_cache(cache_key, analysis_results)
+        try:
+            cache_key = self._generate_cache_key(documents)
+            self._save_to_cache(cache_key, analysis_results)
+        except Exception as e:
+            self.logger.warning(f"Failed to cache results: {e}")
         
         self.logger.info("AI analysis completed")
         return analysis_results
