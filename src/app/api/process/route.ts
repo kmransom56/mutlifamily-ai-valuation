@@ -15,6 +15,7 @@ import {
   NotificationConfig
 } from '@/types/processing';
 import { sendProcessingUpdate, sendProgressUpdate, sendJobComplete, sendError } from '@/lib/websocket-manager';
+import { propertyDatabase } from '@/lib/property-database';
 
 const execPromise = promisify(exec);
 
@@ -235,7 +236,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
       includeAnalysis ? '--include-analysis' : ''
     ].filter(Boolean).join(' ');
     
-    const command = `cd "${aiProcessingDir}" && python3 "${mainScript}" ${args}`;
+    // Use virtual environment if available, otherwise use system Python
+    const venvPythonUnix = path.join(aiProcessingDir, 'venv', 'bin', 'python3');
+    const venvPythonWin = path.join(aiProcessingDir, 'venv', 'Scripts', 'python.exe');
+    
+    let pythonCmd = 'python3';
+    if (fs.existsSync(venvPythonUnix)) {
+      pythonCmd = venvPythonUnix;
+    } else if (fs.existsSync(venvPythonWin)) {
+      pythonCmd = venvPythonWin;
+    }
+    
+    const command = `cd "${aiProcessingDir}" && "${pythonCmd}" "${mainScript}" ${args}`;
     
     // Send initial processing update
     sendProcessingUpdate(jobId, (user as any).id, {
@@ -460,6 +472,167 @@ export async function GET(request: NextRequest): Promise<NextResponse<JobStatusR
   }
 }
 
+// Function to create property from processing results
+async function createPropertyFromProcessingResults(outputDir: string, jobId: string, userId: string) {
+  try {
+    // Check for processing results file
+    const processingResultsPath = path.join(outputDir, 'processing_results.json');
+    const integratedDataPath = path.join(outputDir, 'integratedData.json');
+    
+    let propertyData: any = null;
+    
+    // Try to load property data from results
+    if (fs.existsSync(processingResultsPath)) {
+      try {
+        const results = JSON.parse(fs.readFileSync(processingResultsPath, 'utf-8'));
+        propertyData = results.property || results;
+      } catch (error) {
+        console.error('Error parsing processing results:', error);
+      }
+    }
+    
+    // Fallback to integrated data
+    if (!propertyData && fs.existsSync(integratedDataPath)) {
+      try {
+        const integratedData = JSON.parse(fs.readFileSync(integratedDataPath, 'utf-8'));
+        propertyData = integratedData.property || integratedData;
+      } catch (error) {
+        console.error('Error parsing integrated data:', error);
+      }
+    }
+    
+    // Create property if we have data
+    if (propertyData && propertyData.name) {
+      const newProperty = await propertyDatabase.saveProperty({
+        name: propertyData.name || `Property ${jobId}`,
+        type: propertyData.type || 'multifamily',
+        location: propertyData.location || 'Unknown Location',
+        units: propertyData.units || propertyData.totalUnits || 1,
+        userId: userId,
+        financialData: propertyData.askingPrice || propertyData.grossIncome ? {
+          purchasePrice: propertyData.askingPrice || propertyData.price || 0,
+          grossIncome: propertyData.grossIncome || propertyData.totalIncome || 0,
+          operatingExpenses: propertyData.operatingExpenses || propertyData.totalExpenses || 0,
+          vacancy: 0.05, // Default 5% vacancy
+          loanAmount: 0,
+          interestRate: 0.05,
+          loanTerm: 30,
+          cashInvested: 0,
+          appreciationRate: 0.03,
+          rentGrowthRate: 0.03,
+          expenseGrowthRate: 0.03,
+          holdingPeriod: 10,
+          capRateAtSale: propertyData.capRate || 0.06,
+          askingPrice: propertyData.askingPrice || propertyData.price,
+          noi: propertyData.noi || propertyData.netOperatingIncome,
+          capRate: propertyData.capRate,
+          cashOnCashReturn: propertyData.cashOnCashReturn,
+          irr: propertyData.irr,
+          dscr: propertyData.dscr,
+          ltv: propertyData.ltv
+        } : undefined,
+        notes: `Created from document processing job ${jobId}`
+      });
+      
+      console.log(`Created property ${newProperty.id} from processing job ${jobId}`);
+      
+      // Update property with analysis data if available
+      if (propertyData.capRate || propertyData.noi) {
+        await propertyDatabase.updateProperty({
+          id: newProperty.id,
+          status: 'Analyzed',
+          askingPrice: propertyData.askingPrice || propertyData.price,
+          pricePerUnit: propertyData.pricePerUnit,
+          grossIncome: propertyData.grossIncome || propertyData.totalIncome,
+          operatingExpenses: propertyData.operatingExpenses || propertyData.totalExpenses,
+          noi: propertyData.noi || propertyData.netOperatingIncome,
+          capRate: propertyData.capRate,
+          cashOnCashReturn: propertyData.cashOnCashReturn,
+          irr: propertyData.irr,
+          dscr: propertyData.dscr,
+          ltv: propertyData.ltv,
+          viabilityScore: propertyData.viabilityScore || calculateViabilityScore(propertyData)
+        });
+      }
+      
+      return newProperty;
+    } else {
+      // Create a basic property with minimal info if no detailed data available
+      // Try to extract property name from job metadata or files
+      let propertyName = `Property Analysis ${new Date().toLocaleDateString()}`;
+      
+      try {
+        const jobDir = path.join(process.cwd(), 'uploads', jobId);
+        const jobMetadataPath = path.join(jobDir, 'job_metadata.json');
+        
+        if (fs.existsSync(jobMetadataPath)) {
+          const jobMetadata = JSON.parse(fs.readFileSync(jobMetadataPath, 'utf-8'));
+          
+          // Try to extract property name from file names
+          const t12File = jobMetadata.files?.find((f: any) => f.type === 't12');
+          if (t12File?.originalName) {
+            // Extract property name from T12 filename (e.g., "052125 HC 12712 C LLC Trailing 12mth Financials.xlsx")
+            const fileName = t12File.originalName;
+            if (fileName.includes('HC') && fileName.includes('LLC')) {
+              const match = fileName.match(/HC\s+\d+\s+\w+\s+LLC/);
+              if (match) {
+                propertyName = match[0];
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error extracting property name:', error);
+      }
+      
+      const basicProperty = await propertyDatabase.saveProperty({
+        name: propertyName,
+        type: 'multifamily',
+        location: 'To be determined',
+        units: 1,
+        userId: userId,
+        notes: `Created from document processing job ${jobId}. Please update property details and financial information.`
+      });
+      
+      console.log(`Created basic property ${basicProperty.id} from processing job ${jobId}`);
+      return basicProperty;
+    }
+  } catch (error) {
+    console.error('Error creating property from processing results:', error);
+    return null;
+  }
+}
+
+// Helper function to calculate viability score
+function calculateViabilityScore(propertyData: any): number {
+  let score = 50; // Base score
+  
+  if (propertyData.capRate) {
+    if (propertyData.capRate >= 8) score += 20;
+    else if (propertyData.capRate >= 6) score += 10;
+    else if (propertyData.capRate < 4) score -= 20;
+  }
+  
+  if (propertyData.cashOnCashReturn) {
+    if (propertyData.cashOnCashReturn >= 12) score += 15;
+    else if (propertyData.cashOnCashReturn >= 8) score += 5;
+    else if (propertyData.cashOnCashReturn < 4) score -= 15;
+  }
+  
+  if (propertyData.dscr) {
+    if (propertyData.dscr >= 1.3) score += 10;
+    else if (propertyData.dscr >= 1.2) score += 5;
+    else if (propertyData.dscr < 1.1) score -= 20;
+  }
+  
+  if (propertyData.ltv) {
+    if (propertyData.ltv <= 70) score += 5;
+    else if (propertyData.ltv >= 85) score -= 10;
+  }
+  
+  return Math.max(0, Math.min(100, score));
+}
+
 // Enhanced processing function with real-time WebSocket updates
 async function executeProcessingWithUpdates(
   command: string, 
@@ -514,7 +687,7 @@ async function executeProcessingWithUpdates(
     sendProgressUpdate(jobId, userId, 100, "Processing completed successfully");
     
     // Load results and send completion notification
-    setTimeout(() => {
+    setTimeout(async () => {
       const outputDir = path.join(process.cwd(), "outputs", jobId);
       const downloadUrls: Record<string, string> = {};
       
@@ -527,6 +700,9 @@ async function executeProcessingWithUpdates(
             downloadUrls[fileName] = `/api/files?jobId=${jobId}&file=${file}`;
           }
         });
+
+        // Try to create property from processing results
+        await createPropertyFromProcessingResults(outputDir, jobId, userId);
       }
       
       sendJobComplete(jobId, userId, {

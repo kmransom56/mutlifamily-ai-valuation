@@ -1,6 +1,8 @@
-// Property database service - mock implementation
+// Property database service - mock implementation with file persistence
 import { Property, PropertyAnalysis, PropertyFilter, Unit } from '@/types/property';
 import { FinancialInputs } from '@/lib/financial-calculations';
+import fs from 'fs';
+import path from 'path';
 
 export interface SavePropertyRequest {
   name: string;
@@ -15,6 +17,18 @@ export interface SavePropertyRequest {
 export interface UpdatePropertyRequest extends Partial<SavePropertyRequest> {
   id: string;
   status?: Property['status'];
+  askingPrice?: number;
+  pricePerUnit?: number;
+  grossIncome?: number;
+  operatingExpenses?: number;
+  noi?: number;
+  capRate?: number;
+  cashOnCashReturn?: number;
+  irr?: number;
+  dscr?: number;
+  ltv?: number;
+  equityMultiple?: number;
+  viabilityScore?: number;
 }
 
 export interface PropertySearchOptions {
@@ -26,61 +40,82 @@ export interface PropertySearchOptions {
   filter?: PropertyFilter;
 }
 
-// Mock database storage
-let mockProperties: Property[] = [
-  {
-    id: '1',
-    name: 'Sunset Apartments',
-    type: 'multifamily',
-    units: 48,
-    location: 'Seattle, WA',
-    status: 'Analyzed',
-    dateCreated: '2025-01-15T00:00:00Z',
-    dateAnalyzed: '2025-01-20T00:00:00Z',
-    askingPrice: 4800000,
-    pricePerUnit: 100000,
-    grossIncome: 576000,
-    operatingExpenses: 201600,
-    noi: 374400,
-    capRate: 7.8,
-    cashOnCashReturn: 12.5,
-    irr: 14.2,
-    dscr: 1.35,
-    ltv: 75,
-    viabilityScore: 85,
-    investmentStrategy: 'Value-add through unit renovations',
-    notes: 'Premium location with excellent upside potential. Recently renovated units command higher rents.',
-    files: [
-      {
-        id: '1',
-        propertyId: '1',
-        name: 'Rent Roll - Q4 2024.xlsx',
-        type: 'rent_roll',
-        fileType: 'xlsx',
-        size: 245000,
-        uploadedAt: '2025-01-15T10:30:00Z',
-        processingStatus: 'completed'
-      }
-    ]
-  },
-  {
-    id: '2',
-    name: 'Downtown Lofts',
-    type: 'mixed-use',
-    units: 24,
-    location: 'Portland, OR',
-    status: 'Processing',
-    dateCreated: '2025-01-18T00:00:00Z',
-    askingPrice: 3200000,
-    pricePerUnit: 133333,
-    grossIncome: 288000,
-    operatingExpenses: 115200,
-    notes: 'Urban mixed-use development with retail on ground floor.'
-  }
-];
+// File-based persistence for development
+const DATA_DIR = path.join(process.cwd(), '.dev-data');
+const PROPERTIES_FILE = path.join(DATA_DIR, 'properties.json');
+const ANALYSES_FILE = path.join(DATA_DIR, 'analyses.json');
+const UNITS_FILE = path.join(DATA_DIR, 'units.json');
 
-let mockAnalyses: PropertyAnalysis[] = [];
-let mockUnits: Unit[] = [];
+// Ensure data directory exists
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+// Load data from files
+function loadProperties(): Property[] {
+  try {
+    if (fs.existsSync(PROPERTIES_FILE)) {
+      const data = fs.readFileSync(PROPERTIES_FILE, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('Error loading properties:', error);
+  }
+  return [];
+}
+
+function saveProperties(properties: Property[]): void {
+  try {
+    fs.writeFileSync(PROPERTIES_FILE, JSON.stringify(properties, null, 2));
+  } catch (error) {
+    console.error('Error saving properties:', error);
+  }
+}
+
+function loadAnalyses(): PropertyAnalysis[] {
+  try {
+    if (fs.existsSync(ANALYSES_FILE)) {
+      const data = fs.readFileSync(ANALYSES_FILE, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('Error loading analyses:', error);
+  }
+  return [];
+}
+
+function saveAnalyses(analyses: PropertyAnalysis[]): void {
+  try {
+    fs.writeFileSync(ANALYSES_FILE, JSON.stringify(analyses, null, 2));
+  } catch (error) {
+    console.error('Error saving analyses:', error);
+  }
+}
+
+function loadUnits(): Unit[] {
+  try {
+    if (fs.existsSync(UNITS_FILE)) {
+      const data = fs.readFileSync(UNITS_FILE, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('Error loading units:', error);
+  }
+  return [];
+}
+
+function saveUnits(units: Unit[]): void {
+  try {
+    fs.writeFileSync(UNITS_FILE, JSON.stringify(units, null, 2));
+  } catch (error) {
+    console.error('Error saving units:', error);
+  }
+}
+
+// Database storage - load from files, persist changes
+let mockProperties: Property[] = loadProperties();
+let mockAnalyses: PropertyAnalysis[] = loadAnalyses();
+let mockUnits: Unit[] = loadUnits();
 
 // Property CRUD operations
 export class PropertyDatabase {
@@ -98,6 +133,7 @@ export class PropertyDatabase {
     };
 
     mockProperties.push(newProperty);
+    saveProperties(mockProperties);
     return newProperty;
   }
 
@@ -112,6 +148,7 @@ export class PropertyDatabase {
     };
 
     mockProperties[index] = updatedProperty;
+    saveProperties(mockProperties);
     return updatedProperty;
   }
 
@@ -134,6 +171,11 @@ export class PropertyDatabase {
     // Also delete related data
     mockAnalyses = mockAnalyses.filter(a => a.propertyId !== id);
     mockUnits = mockUnits.filter(u => u.propertyId !== id);
+    
+    // Save changes
+    saveProperties(mockProperties);
+    saveAnalyses(mockAnalyses);
+    saveUnits(mockUnits);
     
     return true;
   }

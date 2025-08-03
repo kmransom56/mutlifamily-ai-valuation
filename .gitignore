@@ -18,6 +18,9 @@ dist/
 
 # Environment variables
 .env*.local
+
+# Development data persistence
+.dev-data/
 .env
 .env.production
 

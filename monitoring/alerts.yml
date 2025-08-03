@@ -1,0 +1,275 @@
+# Prometheus Alerting Rules for AI Automation
+groups:
+  - name: application_health
+    rules:
+      # Application Health Alerts
+      - alert: ApplicationDown
+        expr: up{job="multifamily-ai-app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: application
+        annotations:
+          summary: "Application is down"
+          description: "The main application has been down for more than 1 minute"
+
+      - alert: HighResponseTime
+        expr: avg_over_time(http_request_duration_seconds{job="multifamily-ai-app"}[5m]) > 2
+        for: 2m
+        labels:
+          severity: warning
+          service: application
+        annotations:
+          summary: "High response time detected"
+          description: "Average response time is {{ $value }}s over the last 5 minutes"
+
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          service: application
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanizePercentage }} over the last 5 minutes"
+
+  - name: ai_monitoring
+    rules:
+      # AI System Health Alerts
+      - alert: AIMonitorDown
+        expr: up{job="ai-monitor"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: ai-monitor
+        annotations:
+          summary: "AI Monitor service is down"
+          description: "The AI monitoring service has been unavailable for more than 2 minutes"
+
+      - alert: CriticalAnomalyDetected
+        expr: ai_health_score < 50
+        for: 1m
+        labels:
+          severity: critical
+          service: ai-monitor
+        annotations:
+          summary: "Critical system anomaly detected"
+          description: "AI health score is {{ $value }}, indicating critical system issues"
+
+      - alert: PerformanceDegradation
+        expr: ai_performance_score < 75
+        for: 5m
+        labels:
+          severity: warning
+          service: ai-monitor
+        annotations:
+          summary: "Performance degradation detected"
+          description: "AI performance score is {{ $value }}, indicating performance issues"
+
+      - alert: AnomalyDetectionFailure
+        expr: increase(ai_anomaly_detection_errors_total[10m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+          service: ai-monitor
+        annotations:
+          summary: "AI anomaly detection failures"
+          description: "{{ $value }} anomaly detection failures in the last 10 minutes"
+
+  - name: system_resources
+    rules:
+      # System Resource Alerts
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.85
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}"
+
+      - alert: CriticalMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes > 0.95
+        for: 2m
+        labels:
+          severity: critical
+          service: system
+        annotations:
+          summary: "Critical memory usage"
+          description: "Memory usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}"
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value | humanizePercentage }} on {{ $labels.instance }}"
+
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "Low disk space"
+          description: "Disk space is {{ $value | humanizePercentage }} full on {{ $labels.instance }}"
+
+  - name: database_health
+    rules:
+      # Database Health Alerts
+      - alert: DatabaseDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: database
+        annotations:
+          summary: "Database is down"
+          description: "PostgreSQL database has been down for more than 1 minute"
+
+      - alert: HighDatabaseConnections
+        expr: pg_stat_database_numbackends > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "High database connections"
+          description: "Database has {{ $value }} active connections"
+
+      - alert: DatabaseSlowQueries
+        expr: avg_over_time(pg_stat_database_blk_read_time[5m]) > 1000
+        for: 3m
+        labels:
+          severity: warning
+          service: database
+        annotations:
+          summary: "Slow database queries detected"
+          description: "Average query time is {{ $value }}ms over the last 5 minutes"
+
+  - name: redis_health
+    rules:
+      # Redis Health Alerts
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: redis
+        annotations:
+          summary: "Redis is down"
+          description: "Redis cache service has been down for more than 1 minute"
+
+      - alert: RedisHighMemoryUsage
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: redis
+        annotations:
+          summary: "Redis high memory usage"
+          description: "Redis memory usage is {{ $value | humanizePercentage }}"
+
+  - name: business_metrics
+    rules:
+      # Business Logic Alerts
+      - alert: DocumentProcessingFailures
+        expr: document_processing_success_rate < 0.9
+        for: 5m
+        labels:
+          severity: warning
+          service: business
+        annotations:
+          summary: "Document processing failure rate high"
+          description: "Document processing success rate is {{ $value | humanizePercentage }}"
+
+      - alert: LowUserSatisfaction
+        expr: user_satisfaction_score < 7
+        for: 10m
+        labels:
+          severity: warning
+          service: business
+        annotations:
+          summary: "Low user satisfaction score"
+          description: "User satisfaction score is {{ $value }}/10"
+
+      - alert: PropertyAnalysisErrors
+        expr: increase(property_analysis_errors_total[10m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+          service: business
+        annotations:
+          summary: "Property analysis errors increasing"
+          description: "{{ $value }} property analysis errors in the last 10 minutes"
+
+  - name: security_alerts
+    rules:
+      # Security Alerts
+      - alert: UnusualTrafficPattern
+        expr: rate(http_requests_total[5m]) > 1000
+        for: 2m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "Unusual traffic pattern detected"
+          description: "Request rate is {{ $value }} requests/second"
+
+      - alert: HighFailedAuthentications
+        expr: rate(auth_failures_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          service: security
+        annotations:
+          summary: "High failed authentication rate"
+          description: "{{ $value }} failed authentications per second"
+
+      - alert: SecurityVulnerabilityDetected
+        expr: security_vulnerabilities_high > 0
+        for: 1m
+        labels:
+          severity: critical
+          service: security
+        annotations:
+          summary: "High severity security vulnerability detected"
+          description: "{{ $value }} high severity vulnerabilities found"
+
+  - name: auto_healing
+    rules:
+      # Auto-healing Status Alerts
+      - alert: AutoHealingFailure
+        expr: increase(auto_healing_failures_total[30m]) > 3
+        for: 1m
+        labels:
+          severity: critical
+          service: auto-healing
+        annotations:
+          summary: "Auto-healing system failures"
+          description: "{{ $value }} auto-healing failures in the last 30 minutes"
+
+      - alert: AutoHealingDisabled
+        expr: auto_healing_enabled == 0
+        for: 5m
+        labels:
+          severity: warning
+          service: auto-healing
+        annotations:
+          summary: "Auto-healing is disabled"
+          description: "The auto-healing system has been disabled"
+
+      - alert: FrequentAutoHealing
+        expr: rate(auto_healing_actions_total[1h]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          service: auto-healing
+        annotations:
+          summary: "Frequent auto-healing actions"
+          description: "Auto-healing system is triggering frequently ({{ $value }} actions/hour)"

@@ -1,0 +1,296 @@
+version: '3.8'
+
+services:
+  # Main Application with AI Monitoring
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: multifamily-ai-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - AI_MONITORING_ENABLED=true
+      - AUTO_HEALING_ENABLED=true
+      - PROACTIVE_HEALING_ENABLED=true
+      - HEALTH_CHECK_TIMEOUT=30000
+      - HEALTH_CHECK_RETRIES=3
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/multifamily_ai
+      - REDIS_URL=redis://redis:6379
+      - NEXTAUTH_URL=http://localhost:3000
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-development-secret-key}
+    volumes:
+      - ./logs:/app/logs
+      - ./tmp:/app/tmp
+      - ./uploads:/app/uploads
+      - ./outputs:/app/outputs
+    healthcheck:
+      test: ["CMD", "node", "/app/scripts/automation/ai-health-check.js", "enhanced"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - ai-monitoring
+
+  # AI Monitoring Service
+  ai-monitor:
+    build:
+      context: ./ai_automation
+      dockerfile: Dockerfile
+    container_name: ai-monitor
+    environment:
+      - MONITORING_INTERVAL=30
+      - ANOMALY_THRESHOLD=0.7
+      - AUTO_HEAL_ENABLED=true
+      - LOG_LEVEL=INFO
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/multifamily_ai
+      - REDIS_URL=redis://redis:6379
+      - TARGET_APP_URL=http://app:3000
+    volumes:
+      - ./logs:/app/logs:ro
+      - ./ai_automation/models:/app/models
+      - ./ai_automation/config:/app/config
+      - ./scripts:/app/scripts:rw
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - app
+      - redis
+      - postgres
+    restart: unless-stopped
+    networks:
+      - ai-monitoring
+
+  # Performance Optimizer
+  ai-optimizer:
+    build:
+      context: ./ai_automation
+      dockerfile: Dockerfile
+    container_name: ai-optimizer
+    command: python src/performance_optimizer.py
+    environment:
+      - OPTIMIZATION_INTERVAL=300  # 5 minutes
+      - PREDICTION_HORIZON=3600    # 1 hour
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/multifamily_ai
+      - REDIS_URL=redis://redis:6379
+      - TARGET_APP_URL=http://app:3000
+    volumes:
+      - ./ai_automation/models:/app/models
+      - ./ai_automation/config:/app/config
+      - ./logs:/app/logs:ro
+    depends_on:
+      - ai-monitor
+      - postgres
+      - redis
+    restart: unless-stopped
+    networks:
+      - ai-monitoring
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: multifamily-postgres
+    environment:
+      - POSTGRES_DB=multifamily_ai
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - ai-monitoring
+
+  # Redis for Caching and Sessions
+  redis:
+    image: redis:7-alpine
+    container_name: multifamily-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - ai-monitoring
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    restart: unless-stopped
+    networks:
+      - ai-monitoring
+
+  # Grafana Dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana-dashboards:/var/lib/grafana/dashboards
+      - ./monitoring/grafana-provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - ai-monitoring
+
+  # Node Exporter for System Metrics
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    restart: unless-stopped
+    networks:
+      - ai-monitoring
+
+  # AlertManager for Notifications
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml
+      - alertmanager_data:/alertmanager
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://localhost:9093'
+    restart: unless-stopped
+    networks:
+      - ai-monitoring
+
+  # Nginx Reverse Proxy with Load Balancing
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/ssl:/etc/nginx/ssl
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - ai-monitoring
+
+  # Log Aggregation with ELK Stack (Optional)
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.9.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - "9200:9200"
+    restart: unless-stopped
+    networks:
+      - ai-monitoring
+    profiles:
+      - elk
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.9.0
+    container_name: logstash
+    volumes:
+      - ./monitoring/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+      - ./logs:/app/logs:ro
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+    networks:
+      - ai-monitoring
+    profiles:
+      - elk
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.9.0
+    container_name: kibana
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    depends_on:
+      - elasticsearch
+    restart: unless-stopped
+    networks:
+      - ai-monitoring
+    profiles:
+      - elk
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  alertmanager_data:
+    driver: local
+  elasticsearch_data:
+    driver: local
+
+networks:
+  ai-monitoring:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
