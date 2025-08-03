@@ -9,10 +9,12 @@ const OUTPUT_DIR = path.join(process.cwd(), 'outputs');
 
 export async function GET(request: NextRequest) {
   try {
-    // Authenticate user
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    // Authenticate user (skip in development)
+    if (process.env.NODE_ENV !== 'development') {
+      const session = await getServerSession(authOptions);
+      if (!session?.user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
     }
 
     const { searchParams } = new URL(request.url);
@@ -29,12 +31,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const userId = (session.user as any).id || session.user.email || 'anonymous';
+    const session = await getServerSession(authOptions);
+    const userId = (session?.user as any)?.id || session?.user?.email || 'dev-user';
     let filePath = '';
     let hasAccess = false;
 
     if (jobId) {
-      hasAccess = await verifyJobAccess(jobId, userId);
+      // In development, allow access to any job
+      if (process.env.NODE_ENV === 'development') {
+        hasAccess = true;
+      } else {
+        hasAccess = await verifyJobAccess(jobId, userId);
+      }
+      
       if (hasAccess) {
         const outputDir = path.join(OUTPUT_DIR, jobId);
         filePath = path.join(outputDir, fileName);

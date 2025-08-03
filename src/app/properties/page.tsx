@@ -9,6 +9,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { 
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { 
   Building2, 
   Plus, 
   Search, 
@@ -22,7 +30,12 @@ import {
   Calendar,
   MapPin,
   ArrowUpDown,
-  Loader2
+  Loader2,
+  FileText,
+  BarChart3,
+  Presentation,
+  FileDown,
+  Trash2
 } from 'lucide-react';
 import { Property, PropertyType, PropertyStatus } from '@/types/property';
 
@@ -35,6 +48,7 @@ export default function PropertiesPage() {
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   // Fetch properties from API
   useEffect(() => {
@@ -42,13 +56,19 @@ export default function PropertiesPage() {
       try {
         setLoading(true);
         setError(null);
+        console.log('Fetching properties from /api/properties...');
+        
         const response = await fetch('/api/properties');
+        console.log('Response status:', response.status);
         
         if (!response.ok) {
-          throw new Error('Failed to fetch properties');
+          throw new Error(`Failed to fetch properties: ${response.status} ${response.statusText}`);
         }
         
         const data = await response.json();
+        console.log('Fetched data:', data);
+        console.log('Properties count:', data.properties?.length || 0);
+        
         setProperties(data.properties || []);
       } catch (err) {
         console.error('Error fetching properties:', err);
@@ -161,6 +181,86 @@ export default function PropertiesPage() {
     }));
   }, [properties]);
 
+  // Handle report downloads
+  const handleDownloadReport = async (propertyId: string, reportType: string) => {
+    try {
+      setActionLoading(`${propertyId}-${reportType}`);
+      
+      // Map report types to file names
+      const fileMap: Record<string, string> = {
+        'analysis': 'analysisReport.pdf',
+        'financial': 'populatedTemplate.xlsx', 
+        'presentation': 'pitchDeck.pptx',
+        'data': 'integratedData.json'
+      };
+
+      const fileName = fileMap[reportType];
+      if (!fileName) {
+        throw new Error('Invalid report type');
+      }
+
+      // For now, use direct file access via a simple route
+      const jobId = 'ai-enhanced-final-1754214860';
+      const fileUrl = `/outputs/${jobId}/${fileName}`;
+      
+      // Create download link
+      const a = document.createElement('a');
+      a.href = fileUrl;
+      a.download = fileName;
+      a.target = '_blank';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      
+    } catch (err) {
+      console.error('Download error:', err);
+      alert(`Failed to download report: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  // Generate new pitch deck
+  const handleGeneratePitchDeck = async (propertyId: string) => {
+    try {
+      setActionLoading(`${propertyId}-generate`);
+      
+      const property = properties.find(p => p.id === propertyId);
+      if (!property) {
+        throw new Error('Property not found');
+      }
+
+      const response = await fetch('/api/generate-pitch-deck', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          propertyId,
+          propertyName: property.name,
+          location: property.location,
+          units: property.units
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to generate pitch deck');
+      }
+
+      const result = await response.json();
+      
+      if (result.downloadUrl) {
+        window.open(result.downloadUrl, '_blank');
+      }
+      
+    } catch (err) {
+      console.error('Pitch deck generation error:', err);
+      alert(`Failed to generate pitch deck: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
@@ -181,7 +281,26 @@ export default function PropertiesPage() {
             <div className="flex items-center gap-3">
               <Button variant="outline">
                 <Download className="h-4 w-4 mr-2" />
-                Export
+                Export Portfolio
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  const analyzedProperty = properties.find(p => p.status === 'Analyzed');
+                  if (analyzedProperty) {
+                    handleGeneratePitchDeck(analyzedProperty.id);
+                  } else {
+                    alert('No analyzed properties available for pitch deck generation');
+                  }
+                }}
+                disabled={!properties.some(p => p.status === 'Analyzed') || actionLoading?.includes('generate')}
+              >
+                {actionLoading?.includes('generate') ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Presentation className="h-4 w-4 mr-2" />
+                )}
+                Generate Pitch Deck
               </Button>
               <Link href="/">
                 <Button>
@@ -321,6 +440,38 @@ export default function PropertiesPage() {
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-8 w-8 animate-spin" />
                   <span className="ml-2">Loading properties...</span>
+                </div>
+              ) : error ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center">
+                    <h3 className="text-lg font-semibold text-red-600 mb-2">Error Loading Properties</h3>
+                    <p className="text-sm text-gray-600 mb-4">{error}</p>
+                    <Button onClick={() => window.location.reload()}>
+                      Reload Page
+                    </Button>
+                  </div>
+                </div>
+              ) : filteredAndSortedProperties.length === 0 ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-center">
+                    <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold text-gray-600 mb-2">No Properties Found</h3>
+                    <p className="text-sm text-gray-500 mb-4">
+                      {searchTerm || typeFilter || statusFilter 
+                        ? 'Try adjusting your filters to see more properties.'
+                        : 'Get started by adding your first property.'
+                      }
+                    </p>
+                    <p className="text-xs text-gray-400 mb-4">
+                      Debug: {properties.length} total properties loaded
+                    </p>
+                    <Link href="/">
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Property
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -468,16 +619,102 @@ export default function PropertiesPage() {
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-2">
                             <Link href={`/properties/${property.id}`}>
-                              <Button variant="ghost" size="sm">
+                              <Button variant="ghost" size="sm" title="View Details">
                                 <Eye className="h-4 w-4" />
                               </Button>
                             </Link>
-                            <Button variant="ghost" size="sm">
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
+                            
+                            {property.status === 'Analyzed' && (
+                              <>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => handleDownloadReport(property.id, 'analysis')}
+                                  disabled={actionLoading === `${property.id}-analysis`}
+                                  title="View Analysis Report"
+                                >
+                                  {actionLoading === `${property.id}-analysis` ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <FileText className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => handleDownloadReport(property.id, 'financial')}
+                                  disabled={actionLoading === `${property.id}-financial`}
+                                  title="Financial Projections"
+                                >
+                                  {actionLoading === `${property.id}-financial` ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <BarChart3 className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => handleDownloadReport(property.id, 'presentation')}
+                                  disabled={actionLoading === `${property.id}-presentation`}
+                                  title="Investor Presentation"
+                                >
+                                  {actionLoading === `${property.id}-presentation` ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Presentation className="h-4 w-4" />
+                                  )}
+                                </Button>
+                                
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  onClick={() => handleDownloadReport(property.id, 'data')}
+                                  disabled={actionLoading === `${property.id}-data`}
+                                  title="Export Data"
+                                >
+                                  {actionLoading === `${property.id}-data` ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <FileDown className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              </>
+                            )}
+                            
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  onClick={() => handleGeneratePitchDeck(property.id)}
+                                  disabled={actionLoading === `${property.id}-generate`}
+                                >
+                                  {actionLoading === `${property.id}-generate` ? (
+                                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                  ) : (
+                                    <Presentation className="h-4 w-4 mr-2" />
+                                  )}
+                                  Generate Pitch Deck
+                                </DropdownMenuItem>
+                                <DropdownMenuItem>
+                                  <Edit className="h-4 w-4 mr-2" />
+                                  Edit Property
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem className="text-red-600">
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </td>
                       </tr>
