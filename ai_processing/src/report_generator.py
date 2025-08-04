@@ -159,39 +159,29 @@ class ReportGenerator:
     
     def _generate_excel_report(self, documents: Dict[str, Any], ai_insights: Dict[str, Any],
                              financial_analysis: Dict[str, Any], output_dir: str, job_id: str) -> Optional[Dict[str, str]]:
-        """Generate detailed Excel analysis report"""
+        """Generate detailed Excel analysis report using template if available"""
         
         if not EXCEL_AVAILABLE:
             return None
         
         try:
-            # Create workbook
-            wb = Workbook()
-            
-            # Remove default sheet
-            wb.remove(wb.active)
-            
-            # Create sheets
-            self._create_executive_summary_sheet(wb, documents, ai_insights, financial_analysis)
-            self._create_financial_projections_sheet(wb, financial_analysis)
-            self._create_unit_analysis_sheet(wb, documents)
-            self._create_returns_analysis_sheet(wb, financial_analysis)
-            self._create_sensitivity_analysis_sheet(wb, financial_analysis)
-            
-            # Save workbook
-            excel_path = os.path.join(output_dir, 'populatedTemplate.xlsx')
-            wb.save(excel_path)
-            
-            return {
-                'type': 'excel',
-                'filename': 'populatedTemplate.xlsx', 
-                'path': excel_path,
-                'description': 'Detailed financial analysis workbook'
-            }
+            # Check if template was processed and use it as base
+            template_data = documents.get('template')
+            if template_data and template_data.get('structure'):
+                self.logger.info("Using template-based Excel generation")
+                return self._generate_template_based_excel(documents, ai_insights, financial_analysis, output_dir, job_id)
+            else:
+                self.logger.info("Using programmatic Excel generation")
+                return self._generate_programmatic_excel(documents, ai_insights, financial_analysis, output_dir, job_id)
             
         except Exception as e:
             self.logger.error(f"Error generating Excel report: {e}")
-            return None
+            # Fallback to programmatic generation
+            try:
+                return self._generate_programmatic_excel(documents, ai_insights, financial_analysis, output_dir, job_id)
+            except Exception as fallback_error:
+                self.logger.error(f"Fallback Excel generation also failed: {fallback_error}")
+                return None
     
     def _create_executive_summary_sheet(self, wb: Workbook, documents: Dict[str, Any], 
                                       ai_insights: Dict[str, Any], financial_analysis: Dict[str, Any]):
@@ -705,6 +695,295 @@ Investment Grade: {ai_insights.get('summary', {}).get('investment_grade', 'B')}"
             })
         
         return summary
+    
+    def _generate_template_based_excel(self, documents: Dict[str, Any], ai_insights: Dict[str, Any],
+                                     financial_analysis: Dict[str, Any], output_dir: str, job_id: str) -> Optional[Dict[str, str]]:
+        """Generate Excel report using the template as base"""
+        
+        try:
+            template_data = documents.get('template', {})
+            template_structure = template_data.get('structure', {})
+            
+            # Find the template file path
+            template_file_path = None
+            for file_path in ['/media/keith/DATASTORE1/mutlifamily-ai-valuation/uploads/Rental-Property-Analysis-Spreadsheet-Pro-Demo-Content-v2.1-wdyzht.xltx']:
+                if os.path.exists(file_path):
+                    template_file_path = file_path
+                    break
+            
+            if not template_file_path:
+                self.logger.warning("Template file not found, falling back to programmatic generation")
+                return self._generate_programmatic_excel(documents, ai_insights, financial_analysis, output_dir, job_id)
+            
+            # Load template workbook
+            self.logger.info(f"Loading template: {template_file_path}")
+            wb = load_workbook(template_file_path)
+            
+            # Populate template with extracted data
+            self._populate_template_data(wb, template_structure, documents, ai_insights, financial_analysis)
+            
+            # Save populated template
+            excel_path = os.path.join(output_dir, 'populatedTemplate.xlsx')
+            wb.save(excel_path)
+            
+            self.logger.info(f"Template-based Excel report saved: {excel_path}")
+            
+            return {
+                'type': 'excel',
+                'filename': 'populatedTemplate.xlsx',
+                'path': excel_path,
+                'description': 'Populated rental property analysis template'
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error in template-based Excel generation: {e}")
+            raise
+    
+    def _generate_programmatic_excel(self, documents: Dict[str, Any], ai_insights: Dict[str, Any],
+                                   financial_analysis: Dict[str, Any], output_dir: str, job_id: str) -> Optional[Dict[str, str]]:
+        """Generate Excel report programmatically (fallback method)"""
+        
+        try:
+            # Create workbook
+            wb = Workbook()
+            
+            # Remove default sheet
+            wb.remove(wb.active)
+            
+            # Create sheets
+            self._create_executive_summary_sheet(wb, documents, ai_insights, financial_analysis)
+            self._create_financial_projections_sheet(wb, financial_analysis)
+            self._create_unit_analysis_sheet(wb, documents)
+            self._create_returns_analysis_sheet(wb, financial_analysis)
+            self._create_sensitivity_analysis_sheet(wb, financial_analysis)
+            
+            # Save workbook
+            excel_path = os.path.join(output_dir, 'populatedTemplate.xlsx')
+            wb.save(excel_path)
+            
+            return {
+                'type': 'excel',
+                'filename': 'populatedTemplate.xlsx', 
+                'path': excel_path,
+                'description': 'Detailed financial analysis workbook'
+            }
+            
+        except Exception as e:
+            self.logger.error(f"Error in programmatic Excel generation: {e}")
+            raise
+    
+    def _populate_template_data(self, wb: Workbook, template_structure: Dict[str, Any], 
+                              documents: Dict[str, Any], ai_insights: Dict[str, Any], 
+                              financial_analysis: Dict[str, Any]):
+        """Populate template with actual property data"""
+        
+        try:
+            key_mappings = template_structure.get('key_mappings', {})
+            
+            # Extract data sources
+            property_summary = self._extract_property_summary(documents, ai_insights)
+            financial_summary = self._extract_financial_summary(financial_analysis)
+            rent_roll = documents.get('rent_roll', {})
+            units = rent_roll.get('units', [])
+            
+            # Populate property information
+            self._populate_property_info(wb, key_mappings, property_summary)
+            
+            # Populate unit data
+            self._populate_unit_data(wb, key_mappings, units)
+            
+            # Populate financial inputs
+            self._populate_financial_inputs(wb, key_mappings, financial_summary, financial_analysis)
+            
+            # Populate financing data
+            self._populate_financing_data(wb, key_mappings, financial_analysis)
+            
+            self.logger.info("Template data population completed")
+            
+        except Exception as e:
+            self.logger.error(f"Error populating template data: {e}")
+            raise
+    
+    def _populate_property_info(self, wb: Workbook, key_mappings: Dict[str, Any], property_summary: Dict[str, Any]):
+        """Populate property information section"""
+        
+        try:
+            property_info = key_mappings.get('property_info', {})
+            sheet_name = property_info.get('sheet')
+            mappings = property_info.get('mappings', {})
+            
+            if not sheet_name or sheet_name not in wb.sheetnames:
+                self.logger.warning(f"Property info sheet '{sheet_name}' not found")
+                return
+            
+            ws = wb[sheet_name]
+            
+            # Map property data to cells
+            cell_mappings = {
+                'property_name': property_summary.get('name', 'Property Name'),
+                'property_address': property_summary.get('location', 'Property Address'),
+                'property_city': 'City',  # Extract from location if available
+                'property_state': 'State',
+                'property_zip': 'ZIP',
+                'total_units': property_summary.get('total_units', 0),
+                'total_sqft': property_summary.get('total_sqft', 0),
+                'year_built': 'TBD',  # This would need to be extracted from documents
+                'acquisition_price': property_summary.get('estimated_value', 0)
+            }
+            
+            for field, cell_ref in mappings.items():
+                if field in cell_mappings:
+                    try:
+                        ws[cell_ref] = cell_mappings[field]
+                        self.logger.debug(f"Set {sheet_name}!{cell_ref} = {cell_mappings[field]}")
+                    except Exception as e:
+                        self.logger.warning(f"Could not set cell {cell_ref}: {e}")
+            
+        except Exception as e:
+            self.logger.error(f"Error populating property info: {e}")
+    
+    def _populate_unit_data(self, wb: Workbook, key_mappings: Dict[str, Any], units: List[Dict[str, Any]]):
+        """Populate unit data section"""
+        
+        try:
+            unit_data = key_mappings.get('unit_data', {})
+            sheet_name = unit_data.get('sheet')
+            start_row = unit_data.get('start_row', 12)
+            columns = unit_data.get('columns', {})
+            
+            if not sheet_name or sheet_name not in wb.sheetnames:
+                self.logger.warning(f"Unit data sheet '{sheet_name}' not found")
+                return
+            
+            ws = wb[sheet_name]
+            
+            # Aggregate unit data by type (studio, 1BR, 2BR, etc.)
+            unit_types = {}
+            for unit in units:
+                bedrooms = unit.get('bedrooms', 0)
+                unit_type = f"{int(bedrooms)}BR" if bedrooms > 0 else "Studio"
+                
+                if unit_type not in unit_types:
+                    unit_types[unit_type] = {
+                        'count': 0,
+                        'total_sqft': 0,
+                        'total_rent': 0
+                    }
+                
+                unit_types[unit_type]['count'] += 1
+                unit_types[unit_type]['total_sqft'] += unit.get('sqft', 0)
+                unit_types[unit_type]['total_rent'] += unit.get('current_rent', 0)
+            
+            # Populate aggregated data
+            row = start_row
+            for unit_type, data in unit_types.items():
+                count = data['count']
+                avg_sqft = data['total_sqft'] / count if count > 0 else 0
+                avg_rent = data['total_rent'] / count if count > 0 else 0
+                
+                try:
+                    if 'unit_type' in columns:
+                        ws[f"{columns['unit_type']}{row}"] = unit_type
+                    if 'unit_count' in columns:
+                        ws[f"{columns['unit_count']}{row}"] = count
+                    if 'avg_sqft' in columns:
+                        ws[f"{columns['avg_sqft']}{row}"] = avg_sqft
+                    if 'market_rent' in columns:
+                        ws[f"{columns['market_rent']}{row}"] = avg_rent
+                    if 'current_rent' in columns:
+                        ws[f"{columns['current_rent']}{row}"] = avg_rent
+                    
+                    self.logger.debug(f"Populated unit type {unit_type} in row {row}")
+                    row += 1
+                    
+                except Exception as e:
+                    self.logger.warning(f"Could not populate unit data row {row}: {e}")
+            
+        except Exception as e:
+            self.logger.error(f"Error populating unit data: {e}")
+    
+    def _populate_financial_inputs(self, wb: Workbook, key_mappings: Dict[str, Any], 
+                                 financial_summary: Dict[str, Any], financial_analysis: Dict[str, Any]):
+        """Populate financial inputs section"""
+        
+        try:
+            financial_inputs = key_mappings.get('financial_inputs', {})
+            sheet_name = financial_inputs.get('sheet')
+            mappings = financial_inputs.get('mappings', {})
+            
+            if not sheet_name or sheet_name not in wb.sheetnames:
+                self.logger.warning(f"Financial inputs sheet '{sheet_name}' not found")
+                return
+            
+            ws = wb[sheet_name]
+            
+            # Extract financial assumptions from analysis
+            assumptions = financial_analysis.get('assumptions', {})
+            base_financials = financial_analysis.get('base_financials', {}).get('current_financials', {})
+            
+            cell_mappings = {
+                'annual_rent_increase': assumptions.get('rent_growth_rate', 0.03),  # 3% default
+                'vacancy_rate': assumptions.get('vacancy_rate', 0.05),  # 5% default
+                'property_mgmt_fee': assumptions.get('management_rate', 0.06),  # 6% default
+                'capex_reserve': assumptions.get('capex_rate', 0.05),  # 5% default
+                'operating_expenses': base_financials.get('operating_expenses', 0)
+            }
+            
+            for field, cell_ref in mappings.items():
+                if field in cell_mappings:
+                    try:
+                        value = cell_mappings[field]
+                        # Convert percentages to decimal format if needed
+                        if field in ['annual_rent_increase', 'vacancy_rate', 'property_mgmt_fee', 'capex_reserve'] and value > 1:
+                            value = value / 100
+                        ws[cell_ref] = value
+                        self.logger.debug(f"Set {sheet_name}!{cell_ref} = {value}")
+                    except Exception as e:
+                        self.logger.warning(f"Could not set cell {cell_ref}: {e}")
+            
+        except Exception as e:
+            self.logger.error(f"Error populating financial inputs: {e}")
+    
+    def _populate_financing_data(self, wb: Workbook, key_mappings: Dict[str, Any], financial_analysis: Dict[str, Any]):
+        """Populate financing data section"""
+        
+        try:
+            financing = key_mappings.get('financing', {})
+            sheet_name = financing.get('sheet')
+            mappings = financing.get('mappings', {})
+            
+            if not sheet_name or sheet_name not in wb.sheetnames:
+                self.logger.warning(f"Financing sheet '{sheet_name}' not found")
+                return
+            
+            ws = wb[sheet_name]
+            
+            # Extract financing assumptions
+            financing_assumptions = financial_analysis.get('assumptions', {})
+            returns = financial_analysis.get('returns_analysis', {})
+            estimated_value = returns.get('estimated_value', 0)
+            
+            cell_mappings = {
+                'loan_amount': estimated_value * 0.75,  # 75% LTV default
+                'interest_rate': financing_assumptions.get('interest_rate', 0.055),  # 5.5% default
+                'loan_term': financing_assumptions.get('loan_term_years', 30),  # 30 years default
+                'down_payment': estimated_value * 0.25  # 25% down payment
+            }
+            
+            for field, cell_ref in mappings.items():
+                if field in cell_mappings:
+                    try:
+                        value = cell_mappings[field]
+                        # Convert interest rate to decimal if needed
+                        if field == 'interest_rate' and value > 1:
+                            value = value / 100
+                        ws[cell_ref] = value
+                        self.logger.debug(f"Set {sheet_name}!{cell_ref} = {value}")
+                    except Exception as e:
+                        self.logger.warning(f"Could not set cell {cell_ref}: {e}")
+            
+        except Exception as e:
+            self.logger.error(f"Error populating financing data: {e}")
     
     def _extract_ai_summary(self, ai_insights: Dict[str, Any]) -> Dict[str, Any]:
         """Extract AI insights summary"""

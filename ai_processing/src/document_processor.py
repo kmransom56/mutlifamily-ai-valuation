@@ -807,15 +807,66 @@ class DocumentProcessor:
         
         structure = {
             'sheets': list(excel_data.keys()),
-            'input_areas': [],
-            'calculation_areas': [],
-            'output_areas': []
+            'input_areas': {},
+            'key_mappings': {},
+            'template_type': 'rental_property_analysis'
         }
         
-        # Analyze each sheet for input/output areas
+        # Define key input mappings for the Rental Property Analysis template
+        structure['key_mappings'] = {
+            'property_info': {
+                'sheet': 'DASHBOARD',
+                'mappings': {
+                    'property_name': 'D9',
+                    'property_address': 'D10', 
+                    'property_city': 'D11',
+                    'property_state': 'D12',
+                    'property_zip': 'D13',
+                    'total_units': 'D14',
+                    'total_sqft': 'D15',
+                    'year_built': 'D16',
+                    'acquisition_price': 'D17'
+                }
+            },
+            'unit_data': {
+                'sheet': 'UNIT DATA',
+                'start_row': 12,
+                'columns': {
+                    'unit_type': 'B',
+                    'unit_count': 'C', 
+                    'avg_sqft': 'D',
+                    'market_rent': 'E',
+                    'current_rent': 'F'
+                }
+            },
+            'financial_inputs': {
+                'sheet': 'MULTI-UNITS',
+                'mappings': {
+                    'annual_rent_increase': 'I9',
+                    'vacancy_rate': 'I10',
+                    'property_mgmt_fee': 'I11',
+                    'capex_reserve': 'I12',
+                    'operating_expenses': 'I13'
+                }
+            },
+            'financing': {
+                'sheet': 'DEBT',
+                'mappings': {
+                    'loan_amount': 'I9',
+                    'interest_rate': 'I10',
+                    'loan_term': 'I11',
+                    'down_payment': 'I12'
+                }
+            }
+        }
+        
+        # Analyze each key sheet
         for sheet_name, df in excel_data.items():
-            # Look for input cells (typically highlighted or labeled)
-            # This would need to be customized based on template format
-            pass
+            if sheet_name in ['DASHBOARD', 'MULTI-UNITS', 'UNIT DATA', 'FORECASTS', 'SUMMARY']:
+                structure['input_areas'][sheet_name] = {
+                    'rows': df.shape[0],
+                    'columns': df.shape[1],
+                    'has_data': df.count().sum() > 0
+                }
         
         return structure
