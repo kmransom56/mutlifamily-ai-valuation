@@ -18,7 +18,7 @@ export async function GET(
       );
     }
 
-    const filePath = path.join(process.cwd(), '..', '..', '..', 'output', 'pitch_decks', decodedFilename);
+    const filePath = path.join(process.cwd(), 'storage', 'exports', decodedFilename);
 
     if (!fs.existsSync(filePath)) {
       return NextResponse.json(
@@ -29,10 +29,22 @@ export async function GET(
 
     const fileBuffer = fs.readFileSync(filePath);
     
+    // Determine content type based on file extension
+    let contentType = 'application/octet-stream';
+    if (decodedFilename.endsWith('.json')) {
+      contentType = 'application/json';
+    } else if (decodedFilename.endsWith('.pptx')) {
+      contentType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    } else if (decodedFilename.endsWith('.xlsx')) {
+      contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    } else if (decodedFilename.endsWith('.pdf')) {
+      contentType = 'application/pdf';
+    }
+    
     return new NextResponse(fileBuffer, {
       status: 200,
       headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'Content-Type': contentType,
         'Content-Disposition': `attachment; filename="${decodedFilename}"`,
         'Content-Length': fileBuffer.length.toString(),
       },
