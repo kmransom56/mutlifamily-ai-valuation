@@ -5,10 +5,11 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    command: ["npm", "run", "dev"]
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=development
       - NEXTAUTH_URL=http://localhost:3000
       - NEXTAUTH_SECRET=your-super-secret-key-change-this-in-production
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
