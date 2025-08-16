@@ -6,6 +6,14 @@ import fs from 'fs';
 import path from 'path';
 import * as pdfjs from 'pdfjs-dist';
 
+let Tesseract: any = null;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  Tesseract = require('tesseract.js');
+} catch {
+  Tesseract = null;
+}
+
 // Document preview generation - simplified version
 export async function POST(request: NextRequest) {
   try {
@@ -119,6 +127,7 @@ async function generateBasicDocumentPreview(params: {
       const data = new Uint8Array(fs.readFileSync(actualFilePath));
       const doc = await (pdfjs as any).getDocument({ data }).promise;
       const totalPages = doc.numPages || 1;
+      let ocrExtractedText: string | undefined;
       pages = Array.from({ length: totalPages }).map((_, idx) => ({
         pageNumber: idx + 1,
         imageUrl: `/api/thumbnail?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&page=${idx + 1}`,
@@ -126,6 +135,28 @@ async function generateBasicDocumentPreview(params: {
         textContent: `Page ${idx + 1}`,
         annotations: []
       }));
+
+      // Simple heuristic: if the PDF has no text content on first page, attempt OCR on the thumbnail
+      try {
+        const page1 = await doc.getPage(1);
+        const textContent = await page1.getTextContent();
+        const textItems = (textContent.items || []).map((it: any) => it.str).join(' ').trim();
+        if (!textItems && process.env.ENABLE_BASIC_OCR === '1' && Tesseract) {
+          const thumbUrl = `/api/thumbnail?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&page=1`;
+          // Fetch the thumbnail directly from disk (since we know the path)
+          const thumbsDir = path.join(process.cwd(), 'outputs', params.jobId || '', 'thumbnails');
+          const thumbPath = path.join(thumbsDir, `${fileName.replace(/\.pdf$/i, '')}-p1.png`);
+          if (fs.existsSync(thumbPath)) {
+            const { data: ocr } = await Tesseract.recognize(thumbPath, 'eng');
+            if (ocr && ocr.text) ocrExtractedText = ocr.text;
+          }
+        }
+      } catch {}
+
+      if (ocrExtractedText) {
+        // Attach to the first page's textContent for quick display
+        if (pages[0]) pages[0].textContent = ocrExtractedText.slice(0, 2000);
+      }
     } catch {
       pages = [{
         pageNumber: 1,
