@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 
-// WebSocket connection management
+// WebSocket connection management (not implemented). Prefer SSE at /api/events.
 const connections = new Map<string, WebSocket>();
 const userConnections = new Map<string, Set<string>>();
 
@@ -14,21 +14,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const url = new URL(request.url);
     const upgrade = request.headers.get('upgrade');
     
     if (upgrade !== 'websocket') {
       return NextResponse.json({
-        message: 'WebSocket endpoint',
+        message: 'WebSocket endpoint placeholder. Use Server-Sent Events at /api/events for real-time updates.',
         connections: Array.from(connections.keys()).length,
-        userConnections: userConnections.get(session.user.email as string)?.size || 0
+        userConnections: userConnections.get((session.user.email as string) || 'unknown')?.size || 0
       });
     }
 
-    // Handle WebSocket upgrade request
-    // Note: In a production environment, you would use a proper WebSocket library
-    // like 'ws' or implement this with Socket.IO
-    return new Response('WebSocket upgrade not implemented in this demo', {
+    return new Response('WebSocket upgrade not implemented. Use SSE at /api/events.', {
       status: 501,
       headers: {
         'Content-Type': 'text/plain'

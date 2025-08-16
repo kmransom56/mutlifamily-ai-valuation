@@ -5,6 +5,19 @@ import { ExportRequest, ExportResponse } from '@/types/processing';
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
+
+const exportSchema = z.object({
+  jobId: z.string().min(1),
+  type: z.enum(['analysis', 'pitch_deck', 'summary', 'full_report']),
+  options: z.object({
+    format: z.enum(['excel', 'pdf', 'pptx', 'json', 'csv']),
+    template: z.string().optional(),
+    includeCharts: z.boolean().optional(),
+    includeRawData: z.boolean().optional(),
+    customSections: z.array(z.string()).optional()
+  })
+});
 
 export async function POST(request: NextRequest): Promise<NextResponse<ExportResponse>> {
   try {
@@ -21,7 +34,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExportRes
       }, { status: 401 });
     }
 
-    const body: ExportRequest = await request.json();
+    const json = await request.json();
+    const parsed = exportSchema.safeParse(json);
+    if (!parsed.success) {
+      return NextResponse.json({
+        success: false,
+        downloadUrl: '',
+        filename: '',
+        format: '',
+        size: 0,
+        expiresAt: '',
+        error: 'Invalid request',
+      }, { status: 400 });
+    }
+    const body: ExportRequest = parsed.data as any;
     const { jobId, type, options } = body;
 
     if (!jobId || !type || !options) {
@@ -67,7 +93,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExportRes
     }
 
     // Generate export content based on format
-    let content: string;
+    let content: string | Buffer;
     switch (options.format) {
       case 'json':
         content = JSON.stringify(jobData, null, 2);
@@ -91,12 +117,23 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExportRes
     fs.writeFileSync(exportPath, content);
     const fileSize = fs.statSync(exportPath).size;
 
+    // Write metadata to support /api/files?exportId=...
+    const metadataPath = path.join(exportsDir, `${exportId}_metadata.json`);
+    fs.writeFileSync(metadataPath, JSON.stringify({
+      id: exportId,
+      userId,
+      path: exportPath,
+      filename,
+      format: options.format,
+      createdAt: new Date().toISOString()
+    }, null, 2));
+
     // Set expiration time (24 hours from now)
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
     return NextResponse.json({
       success: true,
-      downloadUrl: `/api/files/export?id=${exportId}`,
+      downloadUrl: `/api/files?exportId=${exportId}`,
       filename,
       format: options.format,
       size: fileSize,
@@ -203,18 +240,30 @@ async function loadJobData(jobId: string) {
     }
     const jobMetadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
 
-    const integratedDataPath = path.join(outputDir, 'integrated_data.json');
-    const analysisDataPath = path.join(outputDir, 'analysis_data.json');
+    // Support both camelCase and snake_case naming used elsewhere
+    const integratedDataPaths = [
+      path.join(outputDir, 'integratedData.json'),
+      path.join(outputDir, 'integrated_data.json')
+    ];
+    const analysisDataPaths = [
+      path.join(outputDir, 'analysisReport.json'),
+      path.join(outputDir, 'analysis_data.json')
+    ];
     
     let integratedData = null;
     let analysisData = null;
     
-    if (fs.existsSync(integratedDataPath)) {
-      integratedData = JSON.parse(fs.readFileSync(integratedDataPath, 'utf-8'));
+    for (const p of integratedDataPaths) {
+      if (fs.existsSync(p)) {
+        integratedData = JSON.parse(fs.readFileSync(p, 'utf-8'));
+        break;
+      }
     }
-    
-    if (fs.existsSync(analysisDataPath)) {
-      analysisData = JSON.parse(fs.readFileSync(analysisDataPath, 'utf-8'));
+    for (const p of analysisDataPaths) {
+      if (fs.existsSync(p)) {
+        analysisData = JSON.parse(fs.readFileSync(p, 'utf-8'));
+        break;
+      }
     }
 
     return {

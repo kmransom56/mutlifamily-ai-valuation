@@ -2,10 +2,49 @@ import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import fs from 'fs';
 import * as XLSX from 'xlsx';
+import { z } from 'zod';
+
+const schema = z.object({
+  property_id: z.string().optional(),
+  property_data: z.object({
+    id: z.any().optional(),
+    name: z.string().optional(),
+    location: z.string().optional(),
+    type: z.string().optional(),
+    units: z.number().optional(),
+    status: z.string().optional(),
+    viabilityScore: z.number().optional(),
+    dateCreated: z.string().optional(),
+    dateAnalyzed: z.string().optional(),
+    notes: z.string().optional(),
+    askingPrice: z.number().optional(),
+    grossIncome: z.number().optional(),
+    operatingExpenses: z.number().optional(),
+    noi: z.number().optional(),
+    capRate: z.number().optional(),
+    cashOnCashReturn: z.number().optional(),
+    irr: z.number().optional(),
+    equityMultiple: z.number().optional(),
+    dscr: z.number().optional(),
+    ltv: z.number().optional(),
+    pricePerUnit: z.number().optional(),
+    files: z.any().optional(),
+    investmentStrategy: z.string().optional()
+  }),
+  formats: z.array(z.enum(['json', 'excel', 'csv'])).optional()
+});
 
 export async function POST(request: NextRequest) {
   try {
-    const { property_id, property_data, formats = ['json', 'excel', 'csv'] } = await request.json();
+    const json = await request.json();
+    const parsed = schema.safeParse(json);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid request' },
+        { status: 400 }
+      );
+    }
+    const { property_id, property_data, formats = ['json', 'excel', 'csv'] } = parsed.data as any;
 
     if (!property_data) {
       return NextResponse.json(

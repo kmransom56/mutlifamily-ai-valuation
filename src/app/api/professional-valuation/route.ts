@@ -155,17 +155,17 @@ export async function POST(request: NextRequest) {
       'class_a': 180000,
       'class_b': 140000,
       'class_c': 100000
-    }[propertyClass];
+    }[propertyClass] ?? 120000;
     
     const marketPricePerSqft = {
       'class_a': 200,
       'class_b': 155,
       'class_c': 110
-    }[propertyClass];
+    }[propertyClass] ?? 140;
     
     const salesComparisonValue = Math.max(
-      units * marketPricePerUnit,
-      buildingSqft * marketPricePerSqft
+      units * (marketPricePerUnit || 0),
+      buildingSqft * (marketPricePerSqft || 0)
     );
 
     // COST APPROACH
@@ -221,8 +221,8 @@ export async function POST(request: NextRequest) {
       },
       sales_comparison_approach: {
         adjusted_sales_price: Math.round(salesComparisonValue),
-        price_per_unit: Math.round(marketPricePerUnit),
-        price_per_sqft: Math.round(marketPricePerSqft)
+        price_per_unit: Math.round(marketPricePerUnit || 0),
+        price_per_sqft: Math.round(marketPricePerSqft || 0)
       },
       cost_approach: {
         replacement_cost: Math.round(replacementCost),
@@ -282,8 +282,8 @@ export async function POST(request: NextRequest) {
     const reconciliation = performUSPAPValueReconciliation({
       sales_comparison_approach: {
         adjusted_sales_price: salesComparisonValue,
-        price_per_unit: marketPricePerUnit,
-        price_per_sqft: marketPricePerSqft
+        price_per_unit: marketPricePerUnit || 0,
+        price_per_sqft: marketPricePerSqft || 0
       },
       cost_approach: {
         replacement_cost: replacementCost,

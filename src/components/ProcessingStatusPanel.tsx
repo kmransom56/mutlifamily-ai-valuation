@@ -19,7 +19,7 @@ import {
   WifiOff,
   Activity
 } from 'lucide-react';
-import { useJobStatusWebSocket } from '@/hooks/useWebSocket';
+import { useJobStatusEvents } from '@/hooks/useSSE';
 import { ProcessingStatusUpdate } from '@/types/processing';
 
 export interface ProcessingStatusPanelProps {
@@ -43,10 +43,8 @@ export default function ProcessingStatusPanel({
     connected,
     jobStatus,
     jobResults,
-    jobError,
-    connect,
-    disconnect
-  } = useJobStatusWebSocket(jobId);
+    jobError
+  } = useJobStatusEvents(jobId);
 
   // Update status history when new status arrives
   useEffect(() => {
@@ -245,24 +243,7 @@ export default function ProcessingStatusPanel({
 
           {/* Connection Controls */}
           <div className="flex items-center gap-2 pt-2 border-t">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={connected ? disconnect : connect}
-              className="flex items-center gap-2"
-            >
-              {connected ? (
-                <>
-                  <Pause className="h-3 w-3" />
-                  Disconnect
-                </>
-              ) : (
-                <>
-                  <Play className="h-3 w-3" />
-                  Connect
-                </>
-              )}
-            </Button>
+            {/* SSE auto-connects; control not needed */}
             
             <Button
               variant="ghost"

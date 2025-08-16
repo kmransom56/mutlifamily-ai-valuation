@@ -1,60 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 
 // Define output directory
 const OUTPUT_DIR = path.join(process.cwd(), 'outputs');
 
+const ALLOWED_EXTENSIONS = new Set([
+  '.pdf', '.xlsx', '.xls', '.pptx', '.ppt', '.docx', '.doc', '.json', '.csv', '.txt', '.jpg', '.jpeg', '.png', '.gif', '.svg'
+]);
+
+function isProdLike() {
+  return process.env.NODE_ENV === 'production' || process.env.__FORCE_PROD__ === '1';
+}
+
 export async function GET(request: NextRequest) {
   try {
-    // For now, skip authentication to debug the endpoint
-    // TODO: Re-enable authentication after fixing
-    console.log('Files API called with URL:', request.url);
+    const session = await getServerSession(authOptions);
+    if (!session?.user && isProdLike()) {
+      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+    }
 
     const { searchParams } = new URL(request.url);
     const jobId = searchParams.get('jobId');
     const exportId = searchParams.get('exportId');
-    const pitchDeckId = searchParams.get('pitchDeckId');
     const fileName = searchParams.get('file');
     const type = searchParams.get('type') || 'download';
-    
-    // Simple health check for the API
-    if (!fileName) {
-      return NextResponse.json(
-        { 
-          success: true, 
-          message: 'Files API is working',
-          availableParams: ['jobId', 'exportId', 'pitchDeckId', 'file', 'type'],
-          providedParams: {
-            jobId, exportId, pitchDeckId: searchParams.get('pitchDeckId'), fileName, type
-          }
-        },
-        { status: 200 }
-      );
-    }
 
-    // Simplified for debugging - skip session for now
-    const userId = 'dev-user';
+    const userId = (session?.user as any)?.id || session?.user?.email || 'dev-user';
+
     let filePath = '';
     let hasAccess = false;
 
-    if (jobId) {
-      // In development, allow access to any job
-      if (process.env.NODE_ENV === 'development') {
-        hasAccess = true;
-      } else {
-        hasAccess = await verifyJobAccess(jobId, userId);
-      }
-      
-      if (hasAccess) {
-        const outputDir = path.join(OUTPUT_DIR, jobId);
-        filePath = path.join(outputDir, fileName);
-        hasAccess = filePath.startsWith(outputDir);
-      }
-    } else if (exportId) {
+    if (exportId) {
+      // Export download via metadata
       const exportDir = path.join(process.cwd(), 'storage', 'exports', userId);
       const metadataPath = path.join(exportDir, `${exportId}_metadata.json`);
-      
+      if (!metadataPath.startsWith(exportDir)) {
+        return NextResponse.json({ success: false, message: 'Invalid export request' }, { status: 400 });
+      }
       if (fs.existsSync(metadataPath)) {
         const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
         if (metadata.userId === userId) {
@@ -62,17 +47,28 @@ export async function GET(request: NextRequest) {
           hasAccess = filePath.startsWith(exportDir);
         }
       }
-    } else if (pitchDeckId) {
-      const pitchDeckDir = path.join(process.cwd(), 'outputs', 'pitch-decks', pitchDeckId);
-      const metadataPath = path.join(pitchDeckDir, 'metadata.json');
-      
-      if (fs.existsSync(metadataPath)) {
-        const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf-8'));
-        if (metadata.userId === userId) {
-          filePath = path.join(pitchDeckDir, fileName);
-          hasAccess = filePath.startsWith(pitchDeckDir);
-        }
+    } else if (jobId && fileName) {
+      // Job output download
+      const ext = path.extname(fileName).toLowerCase();
+      if (!ALLOWED_EXTENSIONS.has(ext)) {
+        return NextResponse.json({ success: false, message: 'File type not allowed' }, { status: 400 });
       }
+
+      // Verify job access
+      if (!isProdLike()) {
+        hasAccess = true;
+      } else {
+        hasAccess = await verifyJobAccess(jobId, userId);
+      }
+
+      if (hasAccess) {
+        const outputDir = path.join(OUTPUT_DIR, jobId);
+        const safeName = fileName.replace(/[\/\\]/g, '');
+        filePath = path.join(outputDir, safeName);
+        hasAccess = filePath.startsWith(outputDir);
+      }
+    } else {
+      return NextResponse.json({ success: false, message: 'Missing parameters' }, { status: 400 });
     }
 
     if (!hasAccess || !filePath) {
@@ -87,7 +83,7 @@ export async function GET(request: NextRequest) {
         { 
           success: false, 
           message: 'File not found',
-          requestedFile: fileName,
+          requestedFile: path.basename(filePath),
           searchedPath: filePath,
           availableFiles: fs.existsSync(path.dirname(filePath)) 
             ? fs.readdirSync(path.dirname(filePath)).slice(0, 5)
@@ -98,7 +94,7 @@ export async function GET(request: NextRequest) {
     }
     
     const stats = fs.statSync(filePath);
-    const fileExt = path.extname(fileName).toLowerCase();
+    const fileExt = path.extname(filePath).toLowerCase();
     const contentType = getContentType(fileExt);
 
     const fileBuffer = fs.readFileSync(filePath);
@@ -110,9 +106,9 @@ export async function GET(request: NextRequest) {
     };
 
     if (type === 'preview') {
-      headers['Content-Disposition'] = `inline; filename="${fileName}"`;
+      headers['Content-Disposition'] = `inline; filename="${path.basename(filePath)}"`;
     } else {
-      headers['Content-Disposition'] = `attachment; filename="${fileName}"`;
+      headers['Content-Disposition'] = `attachment; filename="${path.basename(filePath)}"`;
     }
 
     return new NextResponse(fileBuffer, {
