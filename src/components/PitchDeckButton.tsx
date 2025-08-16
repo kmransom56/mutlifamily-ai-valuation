@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Download, FilePresentation, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
+import { Download, Presentation, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface PitchDeckButtonProps {
   propertyId?: string;
@@ -73,7 +73,7 @@ export default function PitchDeckButton({
     <Card className="w-full">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <FilePresentation className="h-5 w-5" />
+          <Presentation className="h-5 w-5" />
           Generate Investor Pitch Deck
         </CardTitle>
       </CardHeader>
@@ -99,7 +99,7 @@ export default function PitchDeckButton({
                 </>
               ) : (
                 <>
-                  <FilePresentation className="h-4 w-4 mr-2" />
+                  <Presentation className="h-4 w-4 mr-2" />
                   Generate Pitch Deck
                 </>
               )}

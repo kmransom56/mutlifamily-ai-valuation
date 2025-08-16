@@ -76,6 +76,12 @@ setup_environment() {
     
     if [ ! -f .env.local ]; then
         cp .env.docker .env.local
+        if [ -f package-lock.json ]; then
+            cp package-lock.json ./
+            print_success "package-lock.json copied to Docker context"
+        else
+            print_warning "package-lock.json not found. Please run 'npm install' first."
+        fi
         print_warning "Created .env.local from template"
         print_warning "Please update .env.local with your actual configuration values"
         echo ""

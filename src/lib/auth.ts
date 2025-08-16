@@ -113,7 +113,7 @@ export const authOptions: NextAuthOptions = {
           const newUser = await createUser({
             email: user.email!,
             name: user.name || 'Unknown User',
-            image: user.image,
+            image: user.image || undefined,
             role: 'user',
           });
           token.id = newUser.id;
@@ -143,7 +143,6 @@ export const authOptions: NextAuthOptions = {
   },
   pages: {
     signIn: '/auth/signin',
-    signUp: '/auth/signup',
     error: '/auth/error',
   },
   session: {

@@ -8,7 +8,7 @@ import { PropertyAnalysis } from '@/types/property';
 // GET /api/properties/[id]/analysis - Get property analysis
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -16,7 +16,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const analysis = await propertyDatabase.getAnalysis(params.id);
+    const { id } = await params;
+    const analysis = await propertyDatabase.getAnalysis(id);
     if (!analysis) {
       return NextResponse.json({ error: 'Analysis not found' }, { status: 404 });
     }
@@ -34,7 +35,7 @@ export async function GET(
 // POST /api/properties/[id]/analysis - Create/update property analysis
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -42,6 +43,7 @@ export async function POST(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { id } = await params;
     const body = await request.json();
     const financialInputs: FinancialInputs = body;
 
@@ -54,7 +56,7 @@ export async function POST(
     }
 
     // Verify property exists
-    const property = await propertyDatabase.getProperty(params.id);
+    const property = await propertyDatabase.getProperty(id);
     if (!property) {
       return NextResponse.json({ error: 'Property not found' }, { status: 404 });
     }
@@ -64,7 +66,7 @@ export async function POST(
 
     // Create analysis record
     const analysisData: Omit<PropertyAnalysis, 'id' | 'createdAt'> = {
-      propertyId: params.id,
+      propertyId: id,
       sessionId: `session_${Date.now()}`, // In production, use proper session tracking
       
       // Financial Metrics
@@ -126,28 +128,6 @@ export async function POST(
     console.error('Analysis creation error:', error);
     return NextResponse.json(
       { error: 'Failed to create analysis' },
-      { status: 500 }
-    );
-  }
-}
-
-// GET /api/properties/[id]/analysis/history - Get analysis history
-export async function GET_HISTORY(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const session = await getServerSession(authOptions);
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const analyses = await propertyDatabase.getAnalysisHistory(params.id);
-    return NextResponse.json({ analyses });
-  } catch (error) {
-    console.error('Analysis history error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch analysis history' },
       { status: 500 }
     );
   }

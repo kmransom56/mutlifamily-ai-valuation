@@ -6,7 +6,7 @@ import { propertyDatabase } from '@/lib/property-database';
 // GET /api/properties/[id] - Get a specific property
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -14,7 +14,8 @@ export async function GET(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const property = await propertyDatabase.getProperty(params.id, session.user.id);
+    const { id } = await params;
+    const property = await propertyDatabase.getProperty(id, (session.user as any).id);
     if (!property) {
       return NextResponse.json({ error: 'Property not found' }, { status: 404 });
     }
@@ -37,7 +38,7 @@ export async function GET(
 // PUT /api/properties/[id] - Update a property
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -45,10 +46,11 @@ export async function PUT(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const { id } = await params;
     const body = await request.json();
     
     const updatedProperty = await propertyDatabase.updateProperty({
-      id: params.id,
+      id,
       ...body,
     });
 
@@ -69,7 +71,7 @@ export async function PUT(
 // DELETE /api/properties/[id] - Delete a property
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await getServerSession(authOptions);
@@ -77,7 +79,8 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const success = await propertyDatabase.deleteProperty(params.id, session.user.id);
+    const { id } = await params;
+    const success = await propertyDatabase.deleteProperty(id, (session.user as any).id);
     if (!success) {
       return NextResponse.json({ error: 'Property not found' }, { status: 404 });
     }

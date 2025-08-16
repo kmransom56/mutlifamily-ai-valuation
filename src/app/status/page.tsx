@@ -11,8 +11,8 @@ export default function StatusPage() {
   const jobId = searchParams.get('jobId');
   
   const [status, setStatus] = useState('loading');
-  const [files, setFiles] = useState({});
-  const [propertyInfo, setPropertyInfo] = useState({});
+  const [files, setFiles] = useState<Record<string, string>>({});
+  const [propertyInfo, setPropertyInfo] = useState<Record<string, any>>({});
   const [error, setError] = useState('');
   const [isPolling, setIsPolling] = useState(true);
 
@@ -54,7 +54,7 @@ export default function StatusPage() {
     checkStatus();
 
     // Set up polling if needed
-    let intervalId;
+    let intervalId: NodeJS.Timeout | undefined;
     if (isPolling) {
       intervalId = setInterval(checkStatus, 5000); // Check every 5 seconds
     }

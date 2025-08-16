@@ -35,19 +35,23 @@ export async function PUT(request: NextRequest) {
 
     // Update basic profile info
     if (name || Object.keys(otherUpdates).length > 0) {
-      updatedUser = await updateUser(session.user.id, {
+      const result = await updateUser(session.user.id, {
         name,
         ...otherUpdates,
       });
+      if (!result) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      }
+      updatedUser = result;
     }
 
     // Update preferences if provided
     if (preferences) {
-      updatedUser = await updateUserPreferences(session.user.id, preferences);
-    }
-
-    if (!updatedUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      const result = await updateUserPreferences(session.user.id, preferences);
+      if (!result) {
+        return NextResponse.json({ error: 'User not found' }, { status: 404 });
+      }
+      updatedUser = result;
     }
 
     return NextResponse.json({ user: updatedUser });

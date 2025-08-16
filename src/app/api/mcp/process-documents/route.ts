@@ -50,7 +50,7 @@ async function processDocuments(documents: any[], propertyId: string) {
   
   const summary = {
     totalDocuments: documents.length,
-    successfullyProcessed: results.filter(r => r.quality !== 'low').length,
+    successfullyProcessed: results.filter(r => r.quality === 'high' || r.quality === 'medium' || r.quality === 'low').length,
     averageConfidence: results.reduce((sum, r) => sum + r.confidence, 0) / results.length,
     extractedDataPoints: results.reduce((sum, r) => sum + Object.keys(r.extractedData).length, 0),
     overallQuality: calculateOverallQuality(results),
@@ -298,10 +298,13 @@ function generateAnalysisInsights(data: any): string[] {
   ];
 }
 
-function calculateOverallQuality(results: any[]): 'high' | 'medium' | 'low' {
-  const scores = { high: 3, medium: 2, low: 1 };
-  const avgScore = results.reduce((sum, r) => sum + scores[r.quality], 0) / results.length;
-  
+function calculateOverallQuality(
+  results: Array<{ quality: 'high' | 'medium' | 'low' }>
+): 'high' | 'medium' | 'low' {
+  const scores: { [key in 'high' | 'medium' | 'low']: number } = { high: 3, medium: 2, low: 1 };
+  const avgScore =
+    results.reduce((sum, r) => sum + scores[r.quality], 0) / results.length;
+
   if (avgScore >= 2.5) return 'high';
   if (avgScore >= 1.5) return 'medium';
   return 'low';

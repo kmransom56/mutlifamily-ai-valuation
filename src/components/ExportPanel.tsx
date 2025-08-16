@@ -19,16 +19,16 @@ import {
 import { ExportRequest, ExportResponse, ExportOptions } from '@/types/processing';
 
 export interface ExportPanelProps {
-  jobId: string;
+  jobId: string | null;
   onExportComplete?: (result: ExportResponse) => void;
   className?: string;
 }
 
 interface AvailableExport {
-  type: string;
+  type: 'analysis' | 'pitch_deck' | 'summary' | 'full_report';
   name: string;
   description: string;
-  formats: string[];
+  formats: ('excel' | 'pdf' | 'pptx' | 'json' | 'csv')[];
 }
 
 export default function ExportPanel({
@@ -93,7 +93,7 @@ export default function ExportPanel({
     }
   };
 
-  const handleExport = async (type: string) => {
+  const handleExport = async (type: 'analysis' | 'pitch_deck' | 'summary' | 'full_report') => {
     const options = selectedOptions[type];
     if (!options) {
       setError('Export options not configured');
@@ -105,7 +105,7 @@ export default function ExportPanel({
 
     try {
       const exportRequest: ExportRequest = {
-        jobId,
+        jobId: jobId || '',
         type,
         options
       };

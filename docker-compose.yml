@@ -8,11 +8,24 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NODE_ENV=production
-      - NEXTAUTH_URL=http://localhost:3000
-      - NEXTAUTH_SECRET=your-super-secret-key-change-this-in-production
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - NODE_ENV
+      - NEXTAUTH_URL
+      - NEXTAUTH_SECRET
+      - GOOGLE_CLIENT_ID
+      - GOOGLE_CLIENT_SECRET
+      - DATABASE_URL
+      - REDIS_URL
+      - UPLOAD_DIR
+      - OUTPUT_DIR
+      - STORAGE_DIR
+      - ALLOWED_ORIGINS
+      - SMTP_HOST
+      - SMTP_PORT
+      - SMTP_USER
+      - SMTP_PASS
+      - OPENAI_API_KEY
+      - ANTHROPIC_API_KEY
+      - LOG_LEVEL
     volumes:
       - ./uploads:/app/uploads
       - ./outputs:/app/outputs

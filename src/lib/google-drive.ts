@@ -452,4 +452,4 @@ export function createGoogleDriveService(accessToken: string, config?: Partial<G
 }
 
 // Export types for use in components
-export type { PropertyFile, DriveFile, UploadOptions, GoogleDriveConfig };
+export type { PropertyFile } from '@/types/property';

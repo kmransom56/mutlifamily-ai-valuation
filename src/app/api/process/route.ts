@@ -9,14 +9,12 @@ import { authOptions } from '@/lib/auth';
 import { 
   ProcessingJob, 
   ProcessingFile, 
-  ProcessingRequest, 
   ProcessingResponse, 
   JobStatusResponse,
   ProcessingStatus,
-  FileType,
   NotificationConfig
 } from '@/types/processing';
-import { sendProcessingUpdate, sendProgressUpdate, sendJobComplete, sendError } from '../websocket/route';
+import { sendProcessingUpdate, sendProgressUpdate, sendJobComplete, sendError } from '@/lib/websocket-manager';
 
 const execPromise = promisify(exec);
 
@@ -89,7 +87,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
 
     const processingJob: ProcessingJob = {
       id: jobId,
-      userId: session.user.id,
+      userId: (session.user as any).id,
       propertyId: propertyId || undefined,
       status: 'pending',
       progress: 0,
@@ -235,7 +233,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
     }
     
     // Send initial processing update
-    sendProcessingUpdate(jobId, session.user.id, {
+    sendProcessingUpdate(jobId, (session.user as any).id, {
       jobId,
       status: 'processing',
       progress: 0,
@@ -250,7 +248,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
 
     // Execute the command asynchronously with real-time updates
     // In a production environment, this would be handled by a job queue
-    executeProcessingWithUpdates(command, jobId, session.user.id, processingFiles.length);
+    setTimeout(() => {
+      executeProcessingWithUpdates(command, jobId, (session.user as any).id, processingFiles.length);
+    }, 100);
     
     // Calculate estimated completion time
     const estimatedMinutes = processingFiles.length * 2 + (generatePitchDeck ? 3 : 0) + (includeAnalysis ? 2 : 0);
@@ -339,7 +339,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<JobStatusR
     }
     
     // Verify user owns this job
-    if (processingJob.userId !== session.user.id && session.user.role !== 'admin') {
+    if (processingJob.userId !== (session.user as any).id && (session.user as any).role !== 'admin') {
       return NextResponse.json(
         { 
           success: false, 
