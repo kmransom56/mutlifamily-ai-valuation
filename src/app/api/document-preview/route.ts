@@ -121,16 +121,16 @@ async function generateBasicDocumentPreview(params: {
       const totalPages = doc.numPages || 1;
       pages = Array.from({ length: totalPages }).map((_, idx) => ({
         pageNumber: idx + 1,
-        imageUrl: `/api/files?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&type=preview`,
-        thumbnailUrl: `/api/files?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&type=preview`,
+        imageUrl: `/api/thumbnail?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&page=${idx + 1}`,
+        thumbnailUrl: `/api/thumbnail?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&page=${idx + 1}`,
         textContent: `Page ${idx + 1}`,
         annotations: []
       }));
     } catch {
       pages = [{
         pageNumber: 1,
-        imageUrl: `/api/files?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&type=preview`,
-        thumbnailUrl: `/api/files?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&type=preview`,
+        imageUrl: `/api/thumbnail?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&page=1`,
+        thumbnailUrl: `/api/thumbnail?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&page=1`,
         textContent: `File: ${fileName}`,
         annotations: []
       }];
