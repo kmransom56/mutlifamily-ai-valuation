@@ -15,6 +15,13 @@ export interface FinancialInputs {
   expenseGrowthRate: number;
   holdingPeriod: number;
   capRateAtSale: number;
+  askingPrice?: number;
+  noi?: number;
+  capRate?: number;
+  cashOnCashReturn?: number;
+  irr?: number;
+  dscr?: number;
+  ltv?: number;
 }
 
 export interface CalculationResults {

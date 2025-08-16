@@ -15,6 +15,10 @@ import {
   NotificationConfig
 } from '@/types/processing';
 import { sendProcessingUpdate, sendProgressUpdate, sendJobComplete, sendError } from '@/lib/websocket-manager';
+<<<<<<< HEAD
+=======
+import { propertyDatabase } from '@/lib/property-database';
+>>>>>>> 7729ef7fd006f35818317aff5db096f8429d4db3
 
 const execPromise = promisify(exec);
 
@@ -32,9 +36,9 @@ if (!fs.existsSync(OUTPUT_DIR)) {
 
 export async function POST(request: NextRequest): Promise<NextResponse<ProcessingResponse>> {
   try {
-    // Authenticate user
+    // Authenticate user (skip in development)
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    if (!session?.user && process.env.NODE_ENV === 'production') {
       return NextResponse.json({
         success: false,
         jobId: '',
@@ -43,6 +47,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
         error: 'Unauthorized'
       }, { status: 401 });
     }
+
+    // Create a mock user for development if no session
+    const user = session?.user || { 
+      id: 'dev-user', 
+      email: 'dev@example.com', 
+      name: 'Development User' 
+    };
 
     const formData = await request.formData();
     const jobId = uuidv4();
@@ -87,7 +98,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
 
     const processingJob: ProcessingJob = {
       id: jobId,
+<<<<<<< HEAD
       userId: (session.user as any).id,
+=======
+      userId: (user as any).id,
+>>>>>>> 7729ef7fd006f35818317aff5db096f8429d4db3
       propertyId: propertyId || undefined,
       status: 'pending',
       progress: 0,
@@ -192,48 +207,61 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
     const jobMetadataPath = path.join(jobDir, 'job_metadata.json');
     fs.writeFileSync(jobMetadataPath, JSON.stringify(processingJob, null, 2));
     
-    // Build command to run the Python script
-    let command = `cd /home/ubuntu/multifamily_ai_project && python3 src/main.py`;
+    // Show what files were uploaded and explain the processing requirement
+    const filesList = [
+      filePaths.rentRoll && `- Rent Roll: ${filePaths.rentRoll}`,
+      filePaths.t12 && `- T12: ${filePaths.t12}`,
+      filePaths.om && `- Offering Memo: ${filePaths.om}`,
+      filePaths.template && `- Template: ${filePaths.template}`
+    ].filter(Boolean).join('\\n');
     
-    if (filePaths.rentRoll) {
-      command += ` --rent-roll "${filePaths.rentRoll}"`;
+    // Build command to run Python processing system
+    const aiProcessingDir = path.join(process.cwd(), 'ai_processing');
+    const mainScript = path.join(aiProcessingDir, 'src', 'main.py');
+    
+    // Check if AI processing system exists
+    if (!fs.existsSync(mainScript)) {
+      return NextResponse.json({
+        success: false,
+        jobId: '',
+        message: 'AI processing system not found. Please install the Python processing environment.',
+        statusUrl: '',
+        error: 'Processing system not available'
+      }, { status: 500 });
     }
     
-    if (filePaths.t12) {
-      command += ` --t12 "${filePaths.t12}"`;
+    // Build command arguments
+    const args = [
+      `--output-dir "${outputDir}"`,
+      `--job-id "${jobId}"`,
+      propertyId ? `--property-id "${propertyId}"` : '',
+      filePaths.rentRoll ? `--rent-roll "${filePaths.rentRoll}"` : '',
+      filePaths.t12 ? `--t12 "${filePaths.t12}"` : '',
+      filePaths.om ? `--om "${filePaths.om}"` : '',
+      filePaths.template ? `--template "${filePaths.template}"` : '',
+      generatePitchDeck ? '--generate-pitch-deck' : '',
+      includeAnalysis ? '--include-analysis' : ''
+    ].filter(Boolean).join(' ');
+    
+    // Use virtual environment if available, otherwise use system Python
+    const venvPythonUnix = path.join(aiProcessingDir, 'venv', 'bin', 'python3');
+    const venvPythonWin = path.join(aiProcessingDir, 'venv', 'Scripts', 'python.exe');
+    
+    let pythonCmd = 'python3';
+    if (fs.existsSync(venvPythonUnix)) {
+      pythonCmd = venvPythonUnix;
+    } else if (fs.existsSync(venvPythonWin)) {
+      pythonCmd = venvPythonWin;
     }
     
-    if (filePaths.om) {
-      command += ` --om "${filePaths.om}"`;
-    }
-    
-    if (filePaths.template) {
-      command += ` --template "${filePaths.template}"`;
-    }
-    
-    command += ` --output-dir "${outputDir}"`;
-    command += ` --job-id "${jobId}"`;
-    
-    // Add processing options
-    if (generatePitchDeck) {
-      command += ` --generate-pitch-deck`;
-    }
-    
-    if (includeAnalysis) {
-      command += ` --include-analysis`;
-    }
-    
-    if (propertyId) {
-      command += ` --property-id "${propertyId}"`;
-    }
-    
-    // Add notification if email provided
-    if (email) {
-      command += ` --notify email --email "${email}"`;
-    }
+    const command = `cd "${aiProcessingDir}" && "${pythonCmd}" "${mainScript}" ${args}`;
     
     // Send initial processing update
+<<<<<<< HEAD
     sendProcessingUpdate(jobId, (session.user as any).id, {
+=======
+    sendProcessingUpdate(jobId, (user as any).id, {
+>>>>>>> 7729ef7fd006f35818317aff5db096f8429d4db3
       jobId,
       status: 'processing',
       progress: 0,
@@ -249,7 +277,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
     // Execute the command asynchronously with real-time updates
     // In a production environment, this would be handled by a job queue
     setTimeout(() => {
+<<<<<<< HEAD
       executeProcessingWithUpdates(command, jobId, (session.user as any).id, processingFiles.length);
+=======
+      executeProcessingWithUpdates(command, jobId, (user as any).id, processingFiles.length);
+>>>>>>> 7729ef7fd006f35818317aff5db096f8429d4db3
     }, 100);
     
     // Calculate estimated completion time
@@ -296,15 +328,22 @@ export async function GET(request: NextRequest): Promise<NextResponse<JobStatusR
       );
     }
     
-    // Authenticate user
+    // Authenticate user (skip in development)
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    if (!session?.user && process.env.NODE_ENV === 'production') {
       return NextResponse.json({
         success: false,
         job: {} as ProcessingJob,
         error: 'Authentication required'
       }, { status: 401 });
     }
+
+    // Create a mock user for development if no session
+    const user = session?.user || { 
+      id: 'dev-user', 
+      email: 'dev@example.com', 
+      name: 'Development User' 
+    };
     
     const jobDir = path.join(UPLOAD_DIR, jobId);
     const outputDir = path.join(OUTPUT_DIR, jobId);
@@ -339,7 +378,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<JobStatusR
     }
     
     // Verify user owns this job
+<<<<<<< HEAD
     if (processingJob.userId !== (session.user as any).id && (session.user as any).role !== 'admin') {
+=======
+    if (processingJob.userId !== (user as any).id && (user as any).role !== 'admin') {
+>>>>>>> 7729ef7fd006f35818317aff5db096f8429d4db3
       return NextResponse.json(
         { 
           success: false, 
@@ -358,48 +401,58 @@ export async function GET(request: NextRequest): Promise<NextResponse<JobStatusR
     if (fs.existsSync(outputDir)) {
       const files = fs.readdirSync(outputDir);
       
-      // Check for specific output files
-      const integratedDataPath = path.join(outputDir, 'integrated_data.json');
-      const analysisDataPath = path.join(outputDir, 'analysis_data.json');
-      const errorPath = path.join(outputDir, 'error.log');
-      const populatedTemplateFile = files.find(file => file.startsWith('populated_'));
-      const pitchDeckFile = files.find(file => file.endsWith('.pptx') || file.endsWith('.pdf'));
+      // Check for specific output files from Python processing system
+      const integratedDataPath = path.join(outputDir, 'integratedData.json');
+      const populatedTemplatePath = path.join(outputDir, 'populatedTemplate.xlsx');
+      const analysisReportPath = path.join(outputDir, 'analysisReport.pdf');
+      const pitchDeckPath = path.join(outputDir, 'pitchDeck.pptx');
+      const processingResultsPath = path.join(outputDir, 'processing_results.json');
+      const errorDetailsPath = path.join(outputDir, 'error_details.json');
       
       // Check for errors
-      if (fs.existsSync(errorPath)) {
+      if (fs.existsSync(errorDetailsPath)) {
         currentStatus = 'failed';
-        processingJob.error = fs.readFileSync(errorPath, 'utf-8');
+        try {
+          const errorDetails = JSON.parse(fs.readFileSync(errorDetailsPath, 'utf-8'));
+          processingJob.error = errorDetails.error;
+        } catch {
+          processingJob.error = 'Processing failed with unknown error';
+        }
         processingJob.failedAt = new Date().toISOString();
       } else {
         // Calculate progress based on completed files
         if (fs.existsSync(integratedDataPath)) {
           progress = Math.max(progress, 40);
-          downloadUrls.integratedData = `/api/files?jobId=${jobId}&file=integrated_data.json`;
+          downloadUrls.integratedData = `/api/files?jobId=${jobId}&file=integratedData.json`;
         }
         
-        if (fs.existsSync(analysisDataPath)) {
-          progress = Math.max(progress, 70);
-          downloadUrls.analysisData = `/api/files?jobId=${jobId}&file=analysis_data.json`;
+        if (fs.existsSync(populatedTemplatePath)) {
+          progress = Math.max(progress, 65);
+          downloadUrls.populatedTemplate = `/api/files?jobId=${jobId}&file=populatedTemplate.xlsx`;
         }
         
-        if (populatedTemplateFile) {
-          progress = Math.max(progress, 85);
-          downloadUrls.populatedTemplate = `/api/files?jobId=${jobId}&file=${populatedTemplateFile}`;
+        if (fs.existsSync(analysisReportPath)) {
+          progress = Math.max(progress, 80);
+          downloadUrls.analysisReport = `/api/files?jobId=${jobId}&file=analysisReport.pdf`;
         }
         
-        if (pitchDeckFile) {
+        if (fs.existsSync(pitchDeckPath)) {
           progress = Math.max(progress, 95);
-          downloadUrls.pitchDeck = `/api/files?jobId=${jobId}&file=${pitchDeckFile}`;
+          downloadUrls.pitchDeck = `/api/files?jobId=${jobId}&file=pitchDeck.pptx`;
         }
         
-        // Check if all expected outputs are complete
-        const expectedFiles = [integratedDataPath, analysisDataPath];
-        if (populatedTemplateFile) expectedFiles.push(path.join(outputDir, populatedTemplateFile));
-        
-        if (expectedFiles.every(filePath => fs.existsSync(filePath))) {
-          currentStatus = 'completed';
-          progress = 100;
-          processingJob.completedAt = new Date().toISOString();
+        // Check if processing completed successfully
+        if (fs.existsSync(processingResultsPath)) {
+          try {
+            const results = JSON.parse(fs.readFileSync(processingResultsPath, 'utf-8'));
+            if (results.status === 'completed') {
+              currentStatus = 'completed';
+              progress = 100;
+              processingJob.completedAt = new Date().toISOString();
+            }
+          } catch {
+            // Continue with file-based progress calculation
+          }
         }
       }
       
@@ -438,6 +491,167 @@ export async function GET(request: NextRequest): Promise<NextResponse<JobStatusR
   }
 }
 
+// Function to create property from processing results
+async function createPropertyFromProcessingResults(outputDir: string, jobId: string, userId: string) {
+  try {
+    // Check for processing results file
+    const processingResultsPath = path.join(outputDir, 'processing_results.json');
+    const integratedDataPath = path.join(outputDir, 'integratedData.json');
+    
+    let propertyData: any = null;
+    
+    // Try to load property data from results
+    if (fs.existsSync(processingResultsPath)) {
+      try {
+        const results = JSON.parse(fs.readFileSync(processingResultsPath, 'utf-8'));
+        propertyData = results.property || results;
+      } catch (error) {
+        console.error('Error parsing processing results:', error);
+      }
+    }
+    
+    // Fallback to integrated data
+    if (!propertyData && fs.existsSync(integratedDataPath)) {
+      try {
+        const integratedData = JSON.parse(fs.readFileSync(integratedDataPath, 'utf-8'));
+        propertyData = integratedData.property || integratedData;
+      } catch (error) {
+        console.error('Error parsing integrated data:', error);
+      }
+    }
+    
+    // Create property if we have data
+    if (propertyData && propertyData.name) {
+      const newProperty = await propertyDatabase.saveProperty({
+        name: propertyData.name || `Property ${jobId}`,
+        type: propertyData.type || 'multifamily',
+        location: propertyData.location || 'Unknown Location',
+        units: propertyData.units || propertyData.totalUnits || 1,
+        userId: userId,
+        financialData: propertyData.askingPrice || propertyData.grossIncome ? {
+          purchasePrice: propertyData.askingPrice || propertyData.price || 0,
+          grossIncome: propertyData.grossIncome || propertyData.totalIncome || 0,
+          operatingExpenses: propertyData.operatingExpenses || propertyData.totalExpenses || 0,
+          vacancy: 0.05, // Default 5% vacancy
+          loanAmount: 0,
+          interestRate: 0.05,
+          loanTerm: 30,
+          cashInvested: 0,
+          appreciationRate: 0.03,
+          rentGrowthRate: 0.03,
+          expenseGrowthRate: 0.03,
+          holdingPeriod: 10,
+          capRateAtSale: propertyData.capRate || 0.06,
+          askingPrice: propertyData.askingPrice || propertyData.price,
+          noi: propertyData.noi || propertyData.netOperatingIncome,
+          capRate: propertyData.capRate,
+          cashOnCashReturn: propertyData.cashOnCashReturn,
+          irr: propertyData.irr,
+          dscr: propertyData.dscr,
+          ltv: propertyData.ltv
+        } : undefined,
+        notes: `Created from document processing job ${jobId}`
+      });
+      
+      console.log(`Created property ${newProperty.id} from processing job ${jobId}`);
+      
+      // Update property with analysis data if available
+      if (propertyData.capRate || propertyData.noi) {
+        await propertyDatabase.updateProperty({
+          id: newProperty.id,
+          status: 'Analyzed',
+          askingPrice: propertyData.askingPrice || propertyData.price,
+          pricePerUnit: propertyData.pricePerUnit,
+          grossIncome: propertyData.grossIncome || propertyData.totalIncome,
+          operatingExpenses: propertyData.operatingExpenses || propertyData.totalExpenses,
+          noi: propertyData.noi || propertyData.netOperatingIncome,
+          capRate: propertyData.capRate,
+          cashOnCashReturn: propertyData.cashOnCashReturn,
+          irr: propertyData.irr,
+          dscr: propertyData.dscr,
+          ltv: propertyData.ltv,
+          viabilityScore: propertyData.viabilityScore || calculateViabilityScore(propertyData)
+        });
+      }
+      
+      return newProperty;
+    } else {
+      // Create a basic property with minimal info if no detailed data available
+      // Try to extract property name from job metadata or files
+      let propertyName = `Property Analysis ${new Date().toLocaleDateString()}`;
+      
+      try {
+        const jobDir = path.join(process.cwd(), 'uploads', jobId);
+        const jobMetadataPath = path.join(jobDir, 'job_metadata.json');
+        
+        if (fs.existsSync(jobMetadataPath)) {
+          const jobMetadata = JSON.parse(fs.readFileSync(jobMetadataPath, 'utf-8'));
+          
+          // Try to extract property name from file names
+          const t12File = jobMetadata.files?.find((f: any) => f.type === 't12');
+          if (t12File?.originalName) {
+            // Extract property name from T12 filename (e.g., "052125 HC 12712 C LLC Trailing 12mth Financials.xlsx")
+            const fileName = t12File.originalName;
+            if (fileName.includes('HC') && fileName.includes('LLC')) {
+              const match = fileName.match(/HC\s+\d+\s+\w+\s+LLC/);
+              if (match) {
+                propertyName = match[0];
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error extracting property name:', error);
+      }
+      
+      const basicProperty = await propertyDatabase.saveProperty({
+        name: propertyName,
+        type: 'multifamily',
+        location: 'To be determined',
+        units: 1,
+        userId: userId,
+        notes: `Created from document processing job ${jobId}. Please update property details and financial information.`
+      });
+      
+      console.log(`Created basic property ${basicProperty.id} from processing job ${jobId}`);
+      return basicProperty;
+    }
+  } catch (error) {
+    console.error('Error creating property from processing results:', error);
+    return null;
+  }
+}
+
+// Helper function to calculate viability score
+function calculateViabilityScore(propertyData: any): number {
+  let score = 50; // Base score
+  
+  if (propertyData.capRate) {
+    if (propertyData.capRate >= 8) score += 20;
+    else if (propertyData.capRate >= 6) score += 10;
+    else if (propertyData.capRate < 4) score -= 20;
+  }
+  
+  if (propertyData.cashOnCashReturn) {
+    if (propertyData.cashOnCashReturn >= 12) score += 15;
+    else if (propertyData.cashOnCashReturn >= 8) score += 5;
+    else if (propertyData.cashOnCashReturn < 4) score -= 15;
+  }
+  
+  if (propertyData.dscr) {
+    if (propertyData.dscr >= 1.3) score += 10;
+    else if (propertyData.dscr >= 1.2) score += 5;
+    else if (propertyData.dscr < 1.1) score -= 20;
+  }
+  
+  if (propertyData.ltv) {
+    if (propertyData.ltv <= 70) score += 5;
+    else if (propertyData.ltv >= 85) score -= 10;
+  }
+  
+  return Math.max(0, Math.min(100, score));
+}
+
 // Enhanced processing function with real-time WebSocket updates
 async function executeProcessingWithUpdates(
   command: string, 
@@ -469,20 +683,30 @@ async function executeProcessingWithUpdates(
     }, 2000);
 
     // Execute the actual command
-    const { stdout, stderr } = await execPromise(command);
-    
-    clearInterval(updateInterval);
-    
-    console.log("Processing completed:", stdout);
-    if (stderr) {
-      console.error("Processing errors:", stderr);
+    try {
+      const { stdout, stderr } = await execPromise(command);
+      clearInterval(updateInterval);
+      console.log("Processing completed:", stdout);
+      if (stderr) {
+        console.error("Processing errors:", stderr);
+      }
+    } catch (cmdError) {
+      clearInterval(updateInterval);
+      console.error("Command execution failed:", cmdError);
+      
+      // For development, provide helpful error message
+      if (process.env.NODE_ENV === 'development') {
+        throw new Error(`Processing system not available in development mode. This application requires Python processing scripts to analyze real documents. Error: ${cmdError}`);
+      } else {
+        throw cmdError;
+      }
     }
 
     // Send completion update
     sendProgressUpdate(jobId, userId, 100, "Processing completed successfully");
     
     // Load results and send completion notification
-    setTimeout(() => {
+    setTimeout(async () => {
       const outputDir = path.join(process.cwd(), "outputs", jobId);
       const downloadUrls: Record<string, string> = {};
       
@@ -495,6 +719,9 @@ async function executeProcessingWithUpdates(
             downloadUrls[fileName] = `/api/files?jobId=${jobId}&file=${file}`;
           }
         });
+
+        // Try to create property from processing results
+        await createPropertyFromProcessingResults(outputDir, jobId, userId);
       }
       
       sendJobComplete(jobId, userId, {

@@ -1,6 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+// Force dynamic rendering for this page
+export const dynamic = 'force-dynamic';
+
+import React, { useState, Suspense } from 'react';
 import { signIn, getSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
@@ -10,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { AlertCircle, Mail, Lock, LogIn, Eye, EyeOff } from 'lucide-react';
 
-export default function SignInPage() {
+function SignInContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
@@ -244,3 +247,14 @@ export default function SignInPage() {
     </div>
   );
 }
+<<<<<<< HEAD
+=======
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <SignInContent />
+    </Suspense>
+  );
+}
+>>>>>>> 7729ef7fd006f35818317aff5db096f8429d4db3

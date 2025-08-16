@@ -1,18 +1,43 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 
-export default function StatusPage() {
+// Force dynamic rendering for this page
+export const dynamic = 'force-dynamic';
+
+function StatusContent() {
   const searchParams = useSearchParams();
   const jobId = searchParams.get('jobId');
   
   const [status, setStatus] = useState('loading');
+<<<<<<< HEAD
   const [files, setFiles] = useState<Record<string, string>>({});
   const [propertyInfo, setPropertyInfo] = useState<Record<string, any>>({});
+=======
+  
+  interface PropertyInfo {
+    propertyName?: string;
+    propertyType?: string;
+    investmentStrategy?: string;
+    units?: number;
+    location?: string;
+  }
+
+  interface FilesState {
+    populatedTemplate?: string;
+    integratedData?: string;
+    analysisReport?: string;
+    pitchDeck?: string;
+    [key: string]: string | undefined;
+  }
+
+  const [files, setFiles] = useState<FilesState>({});
+  const [propertyInfo, setPropertyInfo] = useState<PropertyInfo | null>(null);
+>>>>>>> 7729ef7fd006f35818317aff5db096f8429d4db3
   const [error, setError] = useState('');
   const [isPolling, setIsPolling] = useState(true);
 
@@ -29,17 +54,22 @@ export default function StatusPage() {
         const data = await response.json();
 
         if (data.success) {
-          setStatus(data.status);
-          setFiles(data.files || {});
-          setPropertyInfo(data.propertyInfo || {});
+          setStatus(data.job.status || data.status);
+          setFiles(data.downloadUrls || {});
+          setPropertyInfo((data.propertyInfo as PropertyInfo) || null);
           
-          // If processing is complete, stop polling
-          if (data.status === 'completed') {
+          // If processing is complete or failed, stop polling
+          if (data.job.status === 'completed' || data.job.status === 'failed') {
             setIsPolling(false);
+          }
+          
+          // Set error message if job failed
+          if (data.job.status === 'failed') {
+            setError(data.job.error || 'Processing failed');
           }
         } else {
           setStatus('error');
-          setError(data.message || 'An error occurred while checking status');
+          setError(data.error || data.message || 'An error occurred while checking status');
           setIsPolling(false);
         }
       } catch (err) {
@@ -54,7 +84,11 @@ export default function StatusPage() {
     checkStatus();
 
     // Set up polling if needed
+<<<<<<< HEAD
     let intervalId: NodeJS.Timeout | undefined;
+=======
+    let intervalId: ReturnType<typeof setInterval> | undefined;
+>>>>>>> 7729ef7fd006f35818317aff5db096f8429d4db3
     if (isPolling) {
       intervalId = setInterval(checkStatus, 5000); // Check every 5 seconds
     }
@@ -81,7 +115,7 @@ export default function StatusPage() {
             <div className="mb-6">
               <h2 className="text-xl font-semibold mb-2">Job ID: {jobId}</h2>
               
-              {propertyInfo && propertyInfo.propertyName && (
+              {propertyInfo?.propertyName && (
                 <div className="mb-4 p-4 bg-gray-50 rounded-md">
                   <h3 className="font-medium mb-2">Property Information</h3>
                   <div className="grid grid-cols-2 gap-2 text-sm">
@@ -191,13 +225,27 @@ export default function StatusPage() {
                 </div>
               )}
               
-              {status === 'error' && (
-                <div className="text-red-600">
-                  <div className="flex items-center space-x-3 mb-4">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              {(status === 'error' || status === 'failed') && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+                  <div className="flex items-start space-x-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <p className="font-medium">Error: {error}</p>
+                    <div className="flex-1">
+                      <h3 className="font-medium text-red-800 mb-2">Processing Failed</h3>
+                      <p className="text-red-700 text-sm mb-4">{error}</p>
+                      <div className="text-red-600 text-sm">
+                        <p className="mb-2"><strong>Your files were uploaded successfully:</strong></p>
+                        <ul className="list-disc list-inside space-y-1 mb-4">
+                          {propertyInfo?.propertyName && <li>Property: {propertyInfo.propertyName}</li>}
+                          <li>Job ID: {jobId}</li>
+                        </ul>
+                        <p className="text-xs text-red-500">
+                          This application requires AI processing capabilities to analyze property documents. 
+                          The uploaded files are saved and can be processed once the AI engine is implemented.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -217,5 +265,13 @@ export default function StatusPage() {
       
       <Footer />
     </div>
+  );
+}
+
+export default function StatusPage() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <StatusContent />
+    </Suspense>
   );
 }

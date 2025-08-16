@@ -1,22 +1,30 @@
-# Use Node.js 18 Alpine as base image
-FROM node:18-alpine AS base
+# Use Node.js 20 Alpine as base image for better compatibility
+FROM node:20-alpine
 
-# Install dependencies only when needed
-FROM base AS deps
-# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine
-RUN apk add --no-cache libc6-compat
+# Install system dependencies
+RUN apk add --no-cache \
+    libc6-compat \
+    python3 \
+    make \
+    g++ \
+    curl
+
 WORKDIR /app
 
-# Install dependencies based on the preferred package manager
+# Copy package files
 COPY package.json package-lock.json* ./
+<<<<<<< HEAD
+RUN npm ci
+=======
+>>>>>>> 7729ef7fd006f35818317aff5db096f8429d4db3
+
+# Install all dependencies (including devDependencies for Tailwind CSS)
 RUN npm ci
 
-# Rebuild the source code only when needed
-FROM base AS builder
-WORKDIR /app
-COPY --from=deps /app/node_modules ./node_modules
+# Copy source code
 COPY . .
 
+<<<<<<< HEAD
 # Build the Next.js application
 RUN npm install -g npm@11.5.2
 RUN npm run build
@@ -41,11 +49,18 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 USER nextjs
+=======
+# Create necessary directories
+RUN mkdir -p uploads outputs storage/exports storage/temp
+>>>>>>> 7729ef7fd006f35818317aff5db096f8429d4db3
 
+# Expose the port
 EXPOSE 3000
 
-ENV PORT 3000
-ENV HOSTNAME "0.0.0.0"
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD curl -f http://localhost:3000/api/health || exit 1
 
-# Start the Next.js application
-CMD ["node", "server.js"]
+# For production, build and start
+# For development, this will be overridden by docker-compose to run npm run dev
+CMD ["sh", "-c", "npm run build && npm start"]

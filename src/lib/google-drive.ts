@@ -452,4 +452,8 @@ export function createGoogleDriveService(accessToken: string, config?: Partial<G
 }
 
 // Export types for use in components
+<<<<<<< HEAD
 export type { PropertyFile } from '@/types/property';
+=======
+// All interfaces are already exported above
+>>>>>>> 7729ef7fd006f35818317aff5db096f8429d4db3

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import Header from '@/components/Header';
@@ -26,94 +26,48 @@ import {
   Target,
   AlertTriangle,
   CheckCircle2,
-  Cloud
+  Loader2
 } from 'lucide-react';
-import { Property, FinancialProjection } from '@/types/property';
-import { FinancialInputs, analyzeProperty } from '@/lib/financial-calculations';
-import GoogleDriveAuth from '@/components/GoogleDriveAuth';
-import GoogleDriveUpload from '@/components/GoogleDriveUpload';
-
-// Mock property data - this would come from your backend
-const mockPropertyData: Property & { analysis?: any } = {
-  id: '1',
-  name: 'Sunset Apartments',
-  type: 'multifamily',
-  units: 48,
-  location: 'Seattle, WA',
-  status: 'Analyzed',
-  dateCreated: '2025-01-15',
-  dateAnalyzed: '2025-01-20',
-  askingPrice: 4800000,
-  pricePerUnit: 100000,
-  grossIncome: 576000,
-  operatingExpenses: 201600,
-  noi: 374400,
-  capRate: 7.8,
-  cashOnCashReturn: 12.5,
-  irr: 14.2,
-  dscr: 1.35,
-  ltv: 75,
-  viabilityScore: 85,
-  notes: 'Premium location with excellent upside potential. Recently renovated units command higher rents.',
-  files: [
-    {
-      id: '1',
-      propertyId: '1',
-      name: 'Rent Roll - Q4 2024.xlsx',
-      type: 'rent_roll',
-      fileType: 'xlsx',
-      size: 245000,
-      uploadedAt: '2025-01-15T10:30:00Z',
-      processingStatus: 'completed'
-    },
-    {
-      id: '2',
-      propertyId: '1',
-      name: 'T12 Operating Statement.pdf',
-      type: 't12',
-      fileType: 'pdf',
-      size: 1200000,
-      uploadedAt: '2025-01-15T10:32:00Z',
-      processingStatus: 'completed'
-    },
-    {
-      id: '3',
-      propertyId: '1',
-      name: 'Investment Analysis.pdf',
-      type: 'analysis',
-      fileType: 'pdf',
-      size: 890000,
-      uploadedAt: '2025-01-20T14:15:00Z',
-      processingStatus: 'completed'
-    }
-  ]
-};
-
-// Mock financial analysis
-const mockFinancialInputs: FinancialInputs = {
-  purchasePrice: 4800000,
-  grossIncome: 576000,
-  operatingExpenses: 201600,
-  vacancy: 5,
-  loanAmount: 3600000,
-  interestRate: 6.5,
-  loanTerm: 30,
-  cashInvested: 1200000,
-  appreciationRate: 3,
-  rentGrowthRate: 2.5,
-  expenseGrowthRate: 3,
-  holdingPeriod: 10,
-  capRateAtSale: 7.5
-};
+import { Property } from '@/types/property';
 
 export default function PropertyDetailPage() {
   const params = useParams();
   const propertyId = params.id as string;
-  const [googleDriveToken, setGoogleDriveToken] = React.useState<string | null>(null);
+  
+  const [property, setProperty] = useState<Property | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // In a real app, you would fetch the property data based on the ID
-  const property = mockPropertyData;
-  const analysis = analyzeProperty(mockFinancialInputs);
+  // Fetch property data from API
+  useEffect(() => {
+    const fetchProperty = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const response = await fetch(`/api/properties/${propertyId}`);
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            throw new Error('Property not found');
+          }
+          throw new Error('Failed to fetch property');
+        }
+        
+        const data = await response.json();
+        setProperty(data.property);
+      } catch (err) {
+        console.error('Error fetching property:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch property');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (propertyId) {
+      fetchProperty();
+    }
+  }, [propertyId]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -124,16 +78,14 @@ export default function PropertyDetailPage() {
     }).format(amount);
   };
 
-  const formatPercentage = (value: number) => {
-    return `${value.toFixed(2)}%`;
-  };
-
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: Property['status']) => {
     switch (status) {
       case 'Analyzed': return 'bg-green-100 text-green-800 border-green-200';
       case 'Processing': return 'bg-blue-100 text-blue-800 border-blue-200';
       case 'Under Review': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
       case 'Pending': return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'Acquired': return 'bg-purple-100 text-purple-800 border-purple-200';
+      case 'Rejected': return 'bg-red-100 text-red-800 border-red-200';
       default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
@@ -147,59 +99,411 @@ export default function PropertyDetailPage() {
     return 'bg-red-100 text-red-800 border-red-200';
   };
 
-  const getViabilityRating = (score?: number) => {
-    if (!score) return 'Not Assessed';
-    if (score >= 85) return 'Excellent';
-    if (score >= 70) return 'Very Good';
-    if (score >= 55) return 'Good';
-    if (score >= 40) return 'Fair';
-    return 'Poor';
+  // Handler functions for action buttons
+  const handleViewAnalysisReport = async () => {
+    if (!property) return;
+    
+    try {
+      // Navigate to analysis report or generate one if it doesn't exist
+      window.open(`/properties/${propertyId}/analysis`, '_blank');
+    } catch (error) {
+      console.error('Error opening analysis report:', error);
+      alert('Failed to open analysis report');
+    }
   };
 
-  const riskFactors = [
-    'Market saturation in Seattle multifamily sector',
-    'Rising interest rates may affect refinancing',
-    'Potential rent control legislation'
-  ];
+  const handleFinancialProjections = async () => {
+    if (!property) return;
+    
+    try {
+      // Generate financial projections report
+      const response = await fetch('/api/generate-financial-projections', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          property_id: propertyId,
+          property_data: property
+        }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.download_url) {
+          // Download the file
+          const link = document.createElement('a');
+          link.href = result.download_url;
+          link.download = result.filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+      } else {
+        throw new Error('Failed to generate financial projections');
+      }
+    } catch (error) {
+      console.error('Error generating financial projections:', error);
+      alert('Failed to generate financial projections');
+    }
+  };
 
-  const opportunities = [
-    'Value-add through unit renovations',
-    'Below-market rents with upside potential',
-    'Strong job growth in surrounding area',
-    'Transit-oriented development nearby'
-  ];
+  const handleInvestorPresentation = async () => {
+    if (!property) return;
+    
+    try {
+      // Generate investor presentation (pitch deck)
+      const response = await fetch('/api/generate-pitch-deck', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          property_id: propertyId,
+          property_data: property,
+          template_type: 'investor_presentation'
+        }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.primary_download_url) {
+          // Download the PowerPoint file
+          const link = document.createElement('a');
+          link.href = result.primary_download_url;
+          link.download = result.filename;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          alert('Investor presentation generated successfully!');
+        }
+      } else {
+        throw new Error('Failed to generate investor presentation');
+      }
+    } catch (error) {
+      console.error('Error generating investor presentation:', error);
+      alert('Failed to generate investor presentation');
+    }
+  };
+
+  const handleExportData = async () => {
+    if (!property) return;
+    
+    try {
+      // Export property data in multiple formats
+      const response = await fetch('/api/export-property-data', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          property_id: propertyId,
+          property_data: property,
+          formats: ['json', 'excel', 'csv']
+        }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.downloads) {
+          // Show download options
+          const format = prompt('Select format to download:\n1. JSON\n2. Excel\n3. CSV\n\nEnter 1, 2, or 3:');
+          let selectedDownload;
+          
+          switch(format) {
+            case '1':
+              selectedDownload = result.downloads.json;
+              break;
+            case '2':
+              selectedDownload = result.downloads.excel;
+              break;
+            case '3':
+              selectedDownload = result.downloads.csv;
+              break;
+            default:
+              selectedDownload = result.downloads.json; // default to JSON
+          }
+          
+          if (selectedDownload) {
+            const link = document.createElement('a');
+            link.href = selectedDownload.url;
+            link.download = selectedDownload.filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }
+        }
+      } else {
+        throw new Error('Failed to export data');
+      }
+    } catch (error) {
+      console.error('Error exporting data:', error);
+      alert('Failed to export data');
+    }
+  };
+
+  const handleProfessionalValuation = async () => {
+    if (!property) return;
+    
+    try {
+      const response = await fetch('/api/professional-valuation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          property_id: propertyId,
+          property_data: property
+        }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          alert(`Professional Valuation Complete!\n\nFinal Valuation: $${result.valuation.final_valuation.weighted_average.toLocaleString()}\nConfidence Level: ${(result.confidence_level * 100).toFixed(1)}%\nProperty Class: ${result.property_class}\n\nRecommendation: ${result.recommendation}`);
+          
+          // Download the detailed report
+          if (result.report_download) {
+            const link = document.createElement('a');
+            link.href = result.report_download;
+            link.download = 'professional_valuation_report.json';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }
+        }
+      } else {
+        throw new Error('Failed to generate professional valuation');
+      }
+    } catch (error) {
+      console.error('Error generating professional valuation:', error);
+      alert('Failed to generate professional valuation');
+    }
+  };
+
+  const handleInvestmentAnalysis = async () => {
+    if (!property) return;
+    
+    try {
+      const response = await fetch('/api/investment-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          property_id: propertyId,
+          property_data: property
+        }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          const summary = result.analysis_summary;
+          alert(`Investment Analysis Complete!\n\nRecommended Scenario: ${summary.recommended_scenario}\nOverall Rating: ${summary.overall_rating}\nRisk Level: ${result.risk_assessment.overall_risk_level}\n\nDetailed Excel analysis has been generated.`);
+          
+          // Download the analysis report
+          if (result.download_url) {
+            const link = document.createElement('a');
+            link.href = result.download_url;
+            link.download = 'investment_analysis.xlsx';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }
+        }
+      } else {
+        throw new Error('Failed to generate investment analysis');
+      }
+    } catch (error) {
+      console.error('Error generating investment analysis:', error);
+      alert('Failed to generate investment analysis');
+    }
+  };
+
+  const handleRiskAssessment = async () => {
+    if (!property) return;
+    alert('Risk Assessment feature coming soon! This will provide comprehensive risk analysis including market risk, property-specific risks, and mitigation strategies.');
+  };
+
+  const handleMarketComps = async () => {
+    if (!property) return;
+    
+    try {
+      const response = await fetch('/api/market-comparables', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          property_id: propertyId,
+          property_data: property,
+          search_radius_miles: 5,
+          max_comparables: 15
+        }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          const summary = result.summary;
+          const position = result.competitive_position;
+          alert(`Market Comparables Analysis Complete!\\n\\nComparables Found: ${summary.total_comparables}\\nActive Listings: ${summary.active_listings}\\nRecent Sales: ${summary.recent_sales}\\n\\nCompetitive Position: ${position.market_rank}\\nPricing Position: ${position.pricing_position}\\n\\nDetailed market analysis report has been generated.`);
+          
+          // Download the analysis report
+          if (result.download_url) {
+            const link = document.createElement('a');
+            link.href = result.download_url;
+            link.download = 'market_comparables_analysis.json';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }
+        }
+      } else {
+        throw new Error('Failed to generate market comparables analysis');
+      }
+    } catch (error) {
+      console.error('Error generating market comparables:', error);
+      alert('Failed to generate market comparables analysis');
+    }
+  };
+
+  const handleMarketAnalysis = async () => {
+    if (!property) return;
+    
+    try {
+      const response = await fetch('/api/market-analysis', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          property_id: propertyId,
+          property_data: property,
+          search_radius_miles: 3,
+          max_comparables: 10
+        }),
+      });
+      
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          const analysis = result.market_analysis;
+          const pricing = result.pricing_analysis;
+          alert(`Market Analysis Complete!\\n\\nComparables Analyzed: ${analysis.comparables_found}\\nMarket Position: ${analysis.subject_property_position}\\nOptimal Price: ${pricing.recommended_price_range.optimal}\\nConfidence: ${pricing.pricing_confidence}\\n\\nComprehensive market analysis report has been generated.`);
+          
+          // Download the analysis report
+          if (result.download_url) {
+            const link = document.createElement('a');
+            link.href = result.download_url;
+            link.download = 'comprehensive_market_analysis.xlsx';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+          }
+        }
+      } else {
+        throw new Error('Failed to generate market analysis');
+      }
+    } catch (error) {
+      console.error('Error generating market analysis:', error);
+      alert('Failed to generate market analysis');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-grow container mx-auto px-4 py-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin mr-2" />
+              <span>Loading property...</span>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-grow container mx-auto px-4 py-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center py-12">
+              <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+              <h1 className="text-2xl font-bold text-red-600 mb-2">Error Loading Property</h1>
+              <p className="text-gray-600 mb-4">{error}</p>
+              <Link href="/properties">
+                <Button>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Properties
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  if (!property) {
+    return (
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <main className="flex-grow container mx-auto px-4 py-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center py-12">
+              <Building2 className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h1 className="text-2xl font-bold text-gray-600 mb-2">Property Not Found</h1>
+              <p className="text-gray-600 mb-4">The property you're looking for doesn't exist.</p>
+              <Link href="/properties">
+                <Button>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Properties
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
       
       <main className="flex-grow container mx-auto px-4 py-8">
-        <div className="max-w-7xl mx-auto space-y-8">
+        <div className="max-w-6xl mx-auto space-y-8">
           {/* Header */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center space-x-4">
               <Link href="/properties">
                 <Button variant="outline" size="sm">
                   <ArrowLeft className="h-4 w-4 mr-2" />
                   Back to Properties
                 </Button>
               </Link>
-              
               <div>
-                <h1 className="text-3xl font-bold tracking-tight flex items-center gap-3">
+                <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
                   <Building2 className="h-8 w-8" />
                   {property.name}
-                  <Badge variant="outline" className={getStatusColor(property.status)}>
-                    {property.status}
-                  </Badge>
                 </h1>
                 <p className="text-muted-foreground mt-1 flex items-center gap-2">
                   <MapPin className="h-4 w-4" />
-                  {property.location} • {property.units} units • {property.type.replace('-', ' ')}
+                  {property.location}
                 </p>
               </div>
             </div>
-            
             <div className="flex items-center gap-3">
               <Button variant="outline">
                 <Share className="h-4 w-4 mr-2" />
@@ -216,47 +520,37 @@ export default function PropertyDetailPage() {
             </div>
           </div>
 
-          {/* Key Metrics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Property Overview */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Purchase Price</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Status</CardTitle>
+                <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{formatCurrency(property.askingPrice || 0)}</div>
-                <p className="text-xs text-muted-foreground">
-                  {formatCurrency(property.pricePerUnit || 0)}/unit
+                <Badge variant="outline" className={getStatusColor(property.status)}>
+                  {property.status}
+                </Badge>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Created: {new Date(property.dateCreated).toLocaleDateString()}
                 </p>
+                {property.dateAnalyzed && (
+                  <p className="text-xs text-muted-foreground">
+                    Analyzed: {new Date(property.dateAnalyzed).toLocaleDateString()}
+                  </p>
+                )}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Cap Rate</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Property Type</CardTitle>
+                <Building2 className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-green-600">
-                  {property.capRate ? formatPercentage(property.capRate) : '-'}
-                </div>
+                <div className="text-2xl font-bold capitalize">{property.type.replace('-', ' ')}</div>
                 <p className="text-xs text-muted-foreground">
-                  Above market average
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">IRR</CardTitle>
-                <BarChart3 className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-600">
-                  {property.irr ? formatPercentage(property.irr) : '-'}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  10-year projection
+                  {property.units} units
                 </p>
               </CardContent>
             </Card>
@@ -267,297 +561,251 @@ export default function PropertyDetailPage() {
                 <Target className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{property.viabilityScore || 0}/100</div>
-                <Badge variant="outline" className={getViabilityColor(property.viabilityScore)}>
-                  {getViabilityRating(property.viabilityScore)}
-                </Badge>
+                {property.viabilityScore ? (
+                  <div>
+                    <div className="text-2xl font-bold">{property.viabilityScore}/100</div>
+                    <Badge variant="outline" className={getViabilityColor(property.viabilityScore)}>
+                      {property.viabilityScore >= 80 ? 'Excellent' : 
+                       property.viabilityScore >= 60 ? 'Good' : 
+                       property.viabilityScore >= 40 ? 'Fair' : 'Poor'}
+                    </Badge>
+                  </div>
+                ) : (
+                  <div className="text-gray-500">Not analyzed</div>
+                )}
               </CardContent>
             </Card>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Main Content */}
-            <div className="lg:col-span-2 space-y-6">
-              {/* Financial Analysis */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Calculator className="h-5 w-5" />
-                    Financial Analysis
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-4">
-                      <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-                        Income & Operations
-                      </h4>
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                          <span className="text-sm font-medium">Gross Income</span>
-                          <span className="font-bold">{formatCurrency(property.grossIncome || 0)}</span>
-                        </div>
-                        <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                          <span className="text-sm font-medium">Operating Expenses</span>
-                          <span className="font-bold">{formatCurrency(property.operatingExpenses || 0)}</span>
-                        </div>
-                        <div className="flex justify-between items-center p-3 bg-green-50 border border-green-200 rounded-lg">
-                          <span className="text-sm font-medium">Net Operating Income</span>
-                          <span className="font-bold text-green-600">{formatCurrency(property.noi || 0)}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-4">
-                      <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-                        Investment Returns
-                      </h4>
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                          <span className="text-sm font-medium">Cash-on-Cash</span>
-                          <span className="font-bold">{property.cashOnCashReturn ? formatPercentage(property.cashOnCashReturn) : '-'}</span>
-                        </div>
-                        <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                          <span className="text-sm font-medium">DSCR</span>
-                          <span className="font-bold">{property.dscr ? `${property.dscr.toFixed(2)}x` : '-'}</span>
-                        </div>
-                        <div className="flex justify-between items-center p-3 bg-muted rounded-lg">
-                          <span className="text-sm font-medium">LTV</span>
-                          <span className="font-bold">{property.ltv ? formatPercentage(property.ltv) : '-'}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Cash Flow Projections */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <BarChart3 className="h-5 w-5" />
-                    10-Year Cash Flow Projections
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3 max-h-80 overflow-y-auto">
-                    {analysis.projections.map((projection: any, index: number) => (
-                      <div key={index} className="grid grid-cols-5 gap-4 p-3 border rounded-lg">
-                        <div className="text-center">
-                          <div className="text-sm font-medium">Year {projection.year}</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-sm text-muted-foreground">Gross Income</div>
-                          <div className="font-medium">{formatCurrency(projection.grossIncome)}</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-sm text-muted-foreground">NOI</div>
-                          <div className="font-medium">{formatCurrency(projection.noi)}</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-sm text-muted-foreground">Cash Flow</div>
-                          <div className={`font-medium ${projection.cashFlow >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(projection.cashFlow)}
-                          </div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-sm text-muted-foreground">Property Value</div>
-                          <div className="font-medium">{formatCurrency(projection.propertyValue)}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Property Details */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Building2 className="h-5 w-5" />
-                    Property Details
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-3">
-                      <div className="flex justify-between">
-                        <span className="text-sm font-medium">Property Type</span>
-                        <span className="capitalize">{property.type.replace('-', ' ')}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm font-medium">Total Units</span>
-                        <span>{property.units}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm font-medium">Date Created</span>
-                        <span>{new Date(property.dateCreated).toLocaleDateString()}</span>
-                      </div>
-                      {property.dateAnalyzed && (
-                        <div className="flex justify-between">
-                          <span className="text-sm font-medium">Date Analyzed</span>
-                          <span>{new Date(property.dateAnalyzed).toLocaleDateString()}</span>
-                        </div>
+          {/* Financial Overview */}
+          {(property.askingPrice || property.grossIncome || property.noi) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5" />
+                  Financial Overview
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {property.askingPrice && (
+                    <div>
+                      <div className="text-2xl font-bold">{formatCurrency(property.askingPrice)}</div>
+                      <p className="text-sm text-muted-foreground">Asking Price</p>
+                      {property.pricePerUnit && (
+                        <p className="text-xs text-muted-foreground">
+                          {formatCurrency(property.pricePerUnit)}/unit
+                        </p>
                       )}
                     </div>
-                    
-                    <div className="space-y-3">
-                      <div className="flex justify-between">
-                        <span className="text-sm font-medium">Location</span>
-                        <span>{property.location}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm font-medium">Current Status</span>
-                        <Badge variant="outline" className={getStatusColor(property.status)}>
-                          {property.status}
-                        </Badge>
-                      </div>
-                    </div>
-                  </div>
+                  )}
                   
-                  {property.notes && (
-                    <div className="mt-6 p-4 bg-muted rounded-lg">
-                      <h4 className="font-medium mb-2">Notes</h4>
-                      <p className="text-sm text-muted-foreground">{property.notes}</p>
+                  {property.grossIncome && (
+                    <div>
+                      <div className="text-2xl font-bold">{formatCurrency(property.grossIncome)}</div>
+                      <p className="text-sm text-muted-foreground">Gross Income</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatCurrency(property.grossIncome / property.units)}/unit
+                      </p>
                     </div>
                   )}
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Sidebar */}
-            <div className="space-y-6">
-              {/* Google Drive Integration */}
-              <GoogleDriveAuth
-                onAuthSuccess={(token) => setGoogleDriveToken(token)}
-                onDisconnect={() => setGoogleDriveToken(null)}
-              />
-
-              {/* Quick Actions */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Link href="/calculator" className="block">
-                    <Button variant="outline" className="w-full justify-start">
-                      <Calculator className="h-4 w-4 mr-2" />
-                      Run Calculator
-                    </Button>
-                  </Link>
-                  <Button variant="outline" className="w-full justify-start">
-                    <FileText className="h-4 w-4 mr-2" />
-                    Generate Pitch Deck
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <Users className="h-4 w-4 mr-2" />
-                    Notify Investors
-                  </Button>
-                  <Button variant="outline" className="w-full justify-start">
-                    <Download className="h-4 w-4 mr-2" />
-                    Export Analysis
-                  </Button>
-                </CardContent>
-              </Card>
-
-              {/* Risk Assessment */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <AlertTriangle className="h-5 w-5 text-orange-500" />
-                    Risk Factors
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {riskFactors.map((risk, index) => (
-                      <div key={index} className="flex items-start gap-2">
-                        <AlertTriangle className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
-                        <span className="text-sm">{risk}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Opportunities */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <CheckCircle2 className="h-5 w-5 text-green-500" />
-                    Opportunities
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {opportunities.map((opportunity, index) => (
-                      <div key={index} className="flex items-start gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                        <span className="text-sm">{opportunity}</span>
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Google Drive File Management */}
-              {googleDriveToken && (
-                <GoogleDriveUpload
-                  propertyId={propertyId}
-                  propertyName={property.name}
-                  accessToken={googleDriveToken}
-                />
-              )}
-
-              {/* Local Property Files (fallback) */}
-              {!googleDriveToken && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <FileText className="h-5 w-5" />
-                      Property Files
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      {property.files?.map((file) => (
-                        <div key={file.id} className="flex items-center justify-between p-3 border rounded-lg">
-                          <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-muted-foreground" />
-                            <div>
-                              <div className="text-sm font-medium">{file.name}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {(file.size / 1024).toFixed(0)} KB • {file.fileType.toUpperCase()}
-                              </div>
-                            </div>
-                          </div>
-                          <Button variant="ghost" size="sm">
-                            <Download className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ))}
+                  
+                  {property.noi && (
+                    <div>
+                      <div className="text-2xl font-bold">{formatCurrency(property.noi)}</div>
+                      <p className="text-sm text-muted-foreground">Net Operating Income</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatCurrency(property.noi / property.units)}/unit
+                      </p>
                     </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </div>
-
-          {/* Google Drive Integration Section */}
-          {googleDriveToken && (
-            <div className="mt-8">
-              <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-                <Cloud className="h-6 w-6" />
-                Document Management
-              </h2>
-              <GoogleDriveUpload
-                propertyId={propertyId}
-                propertyName={property.name}
-                accessToken={googleDriveToken}
-                className="max-w-4xl"
-              />
-            </div>
+                  )}
+                  
+                  {property.capRate && (
+                    <div>
+                      <div className="text-2xl font-bold text-green-600">{property.capRate.toFixed(1)}%</div>
+                      <p className="text-sm text-muted-foreground">Cap Rate</p>
+                      {property.cashOnCashReturn && (
+                        <p className="text-xs text-muted-foreground">
+                          {property.cashOnCashReturn.toFixed(1)}% Cash-on-Cash
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           )}
+
+          {/* Investment Metrics */}
+          {(property.irr || property.dscr || property.ltv || property.equityMultiple) && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Investment Metrics
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {property.irr && (
+                    <div>
+                      <div className="text-2xl font-bold">{property.irr.toFixed(1)}%</div>
+                      <p className="text-sm text-muted-foreground">Internal Rate of Return</p>
+                    </div>
+                  )}
+                  
+                  {property.equityMultiple && (
+                    <div>
+                      <div className="text-2xl font-bold">{property.equityMultiple.toFixed(2)}x</div>
+                      <p className="text-sm text-muted-foreground">Equity Multiple</p>
+                    </div>
+                  )}
+                  
+                  {property.dscr && (
+                    <div>
+                      <div className="text-2xl font-bold">{property.dscr.toFixed(2)}</div>
+                      <p className="text-sm text-muted-foreground">Debt Service Coverage Ratio</p>
+                    </div>
+                  )}
+                  
+                  {property.ltv && (
+                    <div>
+                      <div className="text-2xl font-bold">{property.ltv}%</div>
+                      <p className="text-sm text-muted-foreground">Loan-to-Value Ratio</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Property Notes */}
+          {property.notes && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Property Notes
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm leading-relaxed">{property.notes}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Property Files */}
+          {property.files && property.files.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Property Documents
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {property.files.map((file) => (
+                    <div key={file.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-4 w-4 text-gray-500" />
+                        <div>
+                          <p className="font-medium">{file.name}</p>
+                          <p className="text-xs text-gray-500">
+                            {file.type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())} • 
+                            {(file.size / 1024).toFixed(1)} KB • 
+                            Uploaded {new Date(file.uploadedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className={
+                        file.processingStatus === 'completed' ? 'bg-green-100 text-green-800' :
+                        file.processingStatus === 'processing' ? 'bg-blue-100 text-blue-800' :
+                        'bg-gray-100 text-gray-800'
+                      }>
+                        {file.processingStatus}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Investment Strategy */}
+          {property.investmentStrategy && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calculator className="h-5 w-5" />
+                  Investment Strategy
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm leading-relaxed">{property.investmentStrategy}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Professional Investment Analysis Tools */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calculator className="h-5 w-5" />
+                Professional Investment Analysis
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Button className="h-20 flex-col" onClick={() => handleProfessionalValuation()}>
+                  <Target className="h-6 w-6 mb-2" />
+                  <span className="text-sm font-semibold">Professional Valuation</span>
+                  <span className="text-xs text-muted-foreground">3-Approach Analysis</span>
+                </Button>
+                
+                <Button className="h-20 flex-col" onClick={() => handleInvestmentAnalysis()}>
+                  <TrendingUp className="h-6 w-6 mb-2" />
+                  <span className="text-sm font-semibold">Investment Analysis</span>
+                  <span className="text-xs text-muted-foreground">Multi-Scenario Modeling</span>
+                </Button>
+                
+                <Button className="h-20 flex-col" onClick={() => handleInvestorPresentation()}>
+                  <Users className="h-6 w-6 mb-2" />
+                  <span className="text-sm font-semibold">Investment Memorandum</span>
+                  <span className="text-xs text-muted-foreground">Professional Presentation</span>
+                </Button>
+                
+                <Button className="h-20 flex-col" onClick={() => handleFinancialProjections()}>
+                  <PieChart className="h-6 w-6 mb-2" />
+                  <span className="text-sm font-semibold">Financial Projections</span>
+                  <span className="text-xs text-muted-foreground">10-Year Analysis</span>
+                </Button>
+              </div>
+              
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button variant="outline" size="sm" onClick={() => handleViewAnalysisReport()}>
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Analysis Report
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleExportData()}>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export Data
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleMarketAnalysis()}>
+                  <TrendingUp className="h-4 w-4 mr-2" />
+                  Market Analysis
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleMarketComps()}>
+                  <Building2 className="h-4 w-4 mr-2" />
+                  Market Comparables
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => handleRiskAssessment()}>
+                  <AlertTriangle className="h-4 w-4 mr-2" />
+                  Risk Assessment
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </main>
       

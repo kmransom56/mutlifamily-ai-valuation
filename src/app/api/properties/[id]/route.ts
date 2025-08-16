@@ -10,12 +10,24 @@ export async function GET(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    if (!session?.user && process.env.NODE_ENV === 'production') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+<<<<<<< HEAD
     const { id } = await params;
     const property = await propertyDatabase.getProperty(id, (session.user as any).id);
+=======
+    // Create a mock user for development if no session
+    const user = session?.user || { 
+      id: 'dev-user', 
+      email: 'dev@example.com', 
+      name: 'Development User' 
+    };
+
+    const { id } = await params;
+    const property = await propertyDatabase.getProperty(id, (user as any).id);
+>>>>>>> 7729ef7fd006f35818317aff5db096f8429d4db3
     if (!property) {
       return NextResponse.json({ error: 'Property not found' }, { status: 404 });
     }
@@ -42,10 +54,20 @@ export async function PUT(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    if (!session?.user && process.env.NODE_ENV === 'production') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+<<<<<<< HEAD
+=======
+    // Create a mock user for development if no session
+    const user = session?.user || { 
+      id: 'dev-user', 
+      email: 'dev@example.com', 
+      name: 'Development User' 
+    };
+
+>>>>>>> 7729ef7fd006f35818317aff5db096f8429d4db3
     const { id } = await params;
     const body = await request.json();
     
@@ -75,12 +97,24 @@ export async function DELETE(
 ) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user) {
+    if (!session?.user && process.env.NODE_ENV === 'production') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+<<<<<<< HEAD
     const { id } = await params;
     const success = await propertyDatabase.deleteProperty(id, (session.user as any).id);
+=======
+    // Create a mock user for development if no session
+    const user = session?.user || { 
+      id: 'dev-user', 
+      email: 'dev@example.com', 
+      name: 'Development User' 
+    };
+
+    const { id } = await params;
+    const success = await propertyDatabase.deleteProperty(id, (user as any).id);
+>>>>>>> 7729ef7fd006f35818317aff5db096f8429d4db3
     if (!success) {
       return NextResponse.json({ error: 'Property not found' }, { status: 404 });
     }
