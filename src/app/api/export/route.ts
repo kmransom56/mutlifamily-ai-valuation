@@ -5,6 +5,19 @@ import { ExportRequest, ExportResponse } from '@/types/processing';
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { z } from 'zod';
+
+const exportSchema = z.object({
+  jobId: z.string().min(1),
+  type: z.enum(['analysis', 'pitch_deck', 'summary', 'full_report']),
+  options: z.object({
+    format: z.enum(['excel', 'pdf', 'pptx', 'json', 'csv']),
+    template: z.string().optional(),
+    includeCharts: z.boolean().optional(),
+    includeRawData: z.boolean().optional(),
+    customSections: z.array(z.string()).optional()
+  })
+});
 
 export async function POST(request: NextRequest): Promise<NextResponse<ExportResponse>> {
   try {
@@ -21,7 +34,20 @@ export async function POST(request: NextRequest): Promise<NextResponse<ExportRes
       }, { status: 401 });
     }
 
-    const body: ExportRequest = await request.json();
+    const json = await request.json();
+    const parsed = exportSchema.safeParse(json);
+    if (!parsed.success) {
+      return NextResponse.json({
+        success: false,
+        downloadUrl: '',
+        filename: '',
+        format: '',
+        size: 0,
+        expiresAt: '',
+        error: 'Invalid request',
+      }, { status: 400 });
+    }
+    const body: ExportRequest = parsed.data as any;
     const { jobId, type, options } = body;
 
     if (!jobId || !type || !options) {

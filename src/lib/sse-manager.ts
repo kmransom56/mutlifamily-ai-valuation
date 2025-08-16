@@ -1,9 +1,3 @@
-type SseEventPayload = {
-  type: string;
-  jobId: string;
-  data: any;
-  timestamp: string;
-};
 // Define payload types for each event type
 interface StatusUpdatePayload {
   type: 'status_update';
@@ -47,6 +41,7 @@ type SseEventPayload =
   | ProgressUpdatePayload
   | JobCompletedPayload
   | ErrorPayload;
+
 interface SseClient {
   id: string;
   userId: string;

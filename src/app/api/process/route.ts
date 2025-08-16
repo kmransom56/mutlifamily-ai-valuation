@@ -25,6 +25,7 @@ const execPromise = promisify(exec);
 // Define upload directory
 const UPLOAD_DIR = path.join(process.cwd(), 'uploads');
 const OUTPUT_DIR = path.join(process.cwd(), 'outputs');
+const MAX_UPLOAD_BYTES = parseInt(process.env.MAX_UPLOAD_BYTES || '209715200'); // 200MB default
 
 // Ensure directories exist
 if (!fs.existsSync(UPLOAD_DIR)) {
@@ -175,6 +176,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
     
     // Save files if provided with enhanced metadata (streaming + sanitization)
     if (rentRollFile && rentRollFile.size > 0) {
+      if (rentRollFile.size > MAX_UPLOAD_BYTES) {
+        return NextResponse.json({ success: false, jobId: '', message: 'Rent roll file too large', statusUrl: '', error: 'File too large' }, { status: 400 });
+      }
       const safeOriginal = sanitizeFilename(rentRollFile.name);
       if (!isAllowedExtension(safeOriginal, 'rent_roll')) {
         return NextResponse.json({ success: false, jobId: '', message: 'Invalid rent roll file type', statusUrl: '', error: 'Unsupported file type' }, { status: 400 });
@@ -199,6 +203,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
     }
     
     if (t12File && t12File.size > 0) {
+      if (t12File.size > MAX_UPLOAD_BYTES) {
+        return NextResponse.json({ success: false, jobId: '', message: 'T12 file too large', statusUrl: '', error: 'File too large' }, { status: 400 });
+      }
       const safeOriginal = sanitizeFilename(t12File.name);
       if (!isAllowedExtension(safeOriginal, 't12')) {
         return NextResponse.json({ success: false, jobId: '', message: 'Invalid T12 file type', statusUrl: '', error: 'Unsupported file type' }, { status: 400 });
@@ -223,6 +230,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
     }
     
     if (omFile && omFile.size > 0) {
+      if (omFile.size > MAX_UPLOAD_BYTES) {
+        return NextResponse.json({ success: false, jobId: '', message: 'Offering memo file too large', statusUrl: '', error: 'File too large' }, { status: 400 });
+      }
       const safeOriginal = sanitizeFilename(omFile.name);
       if (!isAllowedExtension(safeOriginal, 'offering_memo')) {
         return NextResponse.json({ success: false, jobId: '', message: 'Invalid offering memo file type', statusUrl: '', error: 'Unsupported file type' }, { status: 400 });
@@ -247,6 +257,9 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
     }
     
     if (templateFile && templateFile.size > 0) {
+      if (templateFile.size > MAX_UPLOAD_BYTES) {
+        return NextResponse.json({ success: false, jobId: '', message: 'Template file too large', statusUrl: '', error: 'File too large' }, { status: 400 });
+      }
       const safeOriginal = sanitizeFilename(templateFile.name);
       if (!isAllowedExtension(safeOriginal, 'template')) {
         return NextResponse.json({ success: false, jobId: '', message: 'Invalid template file type', statusUrl: '', error: 'Unsupported file type' }, { status: 400 });
@@ -743,6 +756,11 @@ async function executeProcessingWithUpdates(
     // Execute the actual command via spawn
     try {
       const child = spawn(proc.cmd, proc.args, { cwd: proc.cwd });
+      // Persist PID for cancel support
+      try {
+        const pidPath = path.join(process.cwd(), 'uploads', jobId, 'pid');
+        fs.writeFileSync(pidPath, String(child.pid));
+      } catch {}
 
       child.stdout.on('data', (data: Buffer) => {
         const text = data.toString();
@@ -765,6 +783,11 @@ async function executeProcessingWithUpdates(
         child.on('error', reject);
         child.on('close', (code) => {
           clearInterval(interval);
+          // Clear PID file on exit
+          try {
+            const pidPath = path.join(process.cwd(), 'uploads', jobId, 'pid');
+            if (fs.existsSync(pidPath)) fs.unlinkSync(pidPath);
+          } catch {}
           if (code === 0) resolve();
           else reject(new Error(`Processing exited with code ${code}`));
         });

@@ -2,15 +2,43 @@ import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import fs from 'fs';
 import PptxGenJS from 'pptxgenjs';
+import { z } from 'zod';
+
+const reqSchema = z.object({
+  property_id: z.string().optional(),
+  property_data: z.object({
+    id: z.any().optional(),
+    name: z.string().min(1).optional(),
+    location: z.string().optional(),
+    type: z.string().optional(),
+    units: z.number().optional(),
+    status: z.string().optional(),
+    viabilityScore: z.number().optional(),
+    askingPrice: z.number().optional(),
+    grossIncome: z.number().optional(),
+    operatingExpenses: z.number().optional(),
+    noi: z.number().optional(),
+    year_built: z.any().optional(),
+    building_sf: z.any().optional(),
+    lot_size: z.any().optional(),
+    dateCreated: z.string().optional(),
+    notes: z.string().optional()
+  }),
+  include_charts: z.boolean().optional(),
+  template_type: z.string().optional()
+});
 
 export async function POST(request: NextRequest) {
   try {
-    const { 
-      property_id, 
-      property_data,
-      include_charts = true,
-      template_type = 'investor_presentation'
-    } = await request.json();
+    const json = await request.json();
+    const parsed = reqSchema.safeParse(json);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { success: false, error: 'Invalid request' },
+        { status: 400 }
+      );
+    }
+    const { property_id, property_data, include_charts = true, template_type = 'investor_presentation' } = parsed.data as any;
 
     if (!property_data) {
       return NextResponse.json(
