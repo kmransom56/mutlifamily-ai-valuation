@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { DocumentPreview } from '@/types/processing';
 import fs from 'fs';
 import path from 'path';
+import * as pdfjs from 'pdfjs-dist';
 
 // Document preview generation - simplified version
 export async function POST(request: NextRequest) {
@@ -94,7 +95,7 @@ async function generateBasicDocumentPreview(params: {
   filePath?: string;
   userId: string;
 }): Promise<DocumentPreview> {
-  const { fileId, jobId, filePath, userId } = params;
+  const { fileId, jobId, filePath } = params;
   
   let actualFilePath = filePath;
   
@@ -111,20 +112,46 @@ async function generateBasicDocumentPreview(params: {
   const fileName = path.basename(actualFilePath);
   const fileExt = path.extname(fileName).toLowerCase();
   
-  // Basic document preview
-  const preview: DocumentPreview = {
-    id: fileId || `preview_${Date.now()}`,
-    fileId: fileId || fileName,
-    type: getDocumentType(fileExt),
-    pages: [{
+  // Multi-page support for PDF: probe page count (no rendering)
+  let pages: any[] = [];
+  if (fileExt === '.pdf') {
+    try {
+      const data = new Uint8Array(fs.readFileSync(actualFilePath));
+      const doc = await (pdfjs as any).getDocument({ data }).promise;
+      const totalPages = doc.numPages || 1;
+      pages = Array.from({ length: totalPages }).map((_, idx) => ({
+        pageNumber: idx + 1,
+        imageUrl: `/api/files?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&type=preview`,
+        thumbnailUrl: `/api/files?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&type=preview`,
+        textContent: `Page ${idx + 1}`,
+        annotations: []
+      }));
+    } catch {
+      pages = [{
+        pageNumber: 1,
+        imageUrl: `/api/files?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&type=preview`,
+        thumbnailUrl: `/api/files?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&type=preview`,
+        textContent: `File: ${fileName}`,
+        annotations: []
+      }];
+    }
+  } else {
+    pages = [{
       pageNumber: 1,
       imageUrl: `/api/files?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&type=preview`,
       thumbnailUrl: `/api/files?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&type=preview`,
       textContent: `File: ${fileName}`,
       annotations: []
-    }],
+    }];
+  }
+
+  const preview: DocumentPreview = {
+    id: fileId || `preview_${Date.now()}`,
+    fileId: fileId || fileName,
+    type: getDocumentType(fileExt),
+    pages,
     metadata: {
-      totalPages: 1,
+      totalPages: pages.length,
       hasText: true,
       quality: 'medium',
       extractedData: {

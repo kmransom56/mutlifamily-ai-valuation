@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
+import { Button } from '@/components/ui/button';
 
 // Force dynamic rendering for this page
 export const dynamic = 'force-dynamic';
@@ -35,6 +36,7 @@ function StatusContent() {
   const [propertyInfo, setPropertyInfo] = useState<PropertyInfo | null>(null);
   const [error, setError] = useState('');
   const [isPolling, setIsPolling] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     if (!jobId) {
@@ -59,7 +61,7 @@ function StatusContent() {
           setPropertyInfo((data.propertyInfo as PropertyInfo) || null);
           
           // If processing is complete or failed, stop polling
-          if (data.job.status === 'completed' || data.job.status === 'failed') {
+          if (data.job.status === 'completed' || data.job.status === 'failed' || data.job.status === 'cancelled') {
             setIsPolling(false);
             return;
           }
@@ -92,6 +94,37 @@ function StatusContent() {
     };
   }, [jobId, isPolling]);
 
+  const cancelJob = async () => {
+    if (!jobId) return;
+    setActionLoading(true);
+    try {
+      const res = await fetch('/api/process/cancel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId })
+      });
+      if (!res.ok) throw new Error('Cancel failed');
+      setStatus('cancelled');
+    } catch (e) {
+      setError('Failed to cancel job');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const retryJob = async () => {
+    if (!jobId) return;
+    setActionLoading(true);
+    try {
+      // Simple retry: re-check once, actual retry would re-run processing with saved files
+      setIsPolling(true);
+    } catch (e) {
+      setError('Failed to retry job');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
@@ -105,6 +138,18 @@ function StatusContent() {
           <div className="card">
             <div className="mb-6">
               <h2 className="text-xl font-semibold mb-2">Job ID: {jobId}</h2>
+              <div className="flex gap-2 mb-4">
+                {(status === 'processing') && (
+                  <Button variant="outline" size="sm" onClick={cancelJob} disabled={actionLoading}>
+                    Cancel Job
+                  </Button>
+                )}
+                {(status === 'failed' || status === 'cancelled') && (
+                  <Button variant="outline" size="sm" onClick={retryJob} disabled={actionLoading}>
+                    Retry
+                  </Button>
+                )}
+              </div>
               
               {propertyInfo?.propertyName && (
                 <div className="mb-4 p-4 bg-gray-50 rounded-md">
@@ -216,14 +261,14 @@ function StatusContent() {
                 </div>
               )}
               
-              {(status === 'error' || status === 'failed') && (
+              {(status === 'error' || status === 'failed' || status === 'cancelled') && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-6">
                   <div className="flex items-start space-x-3">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-red-600 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <div className="flex-1">
-                      <h3 className="font-medium text-red-800 mb-2">Processing Failed</h3>
+                      <h3 className="font-medium text-red-800 mb-2">{status === 'cancelled' ? 'Processing Cancelled' : 'Processing Failed'}</h3>
                       <p className="text-red-700 text-sm mb-4">{error}</p>
                       <div className="text-red-600 text-sm">
                         <p className="mb-2"><strong>Your files were uploaded successfully:</strong></p>
@@ -233,7 +278,7 @@ function StatusContent() {
                         </ul>
                         <p className="text-xs text-red-500">
                           This application requires AI processing capabilities to analyze property documents. 
-                          The uploaded files are saved and can be processed once the AI engine is implemented.
+                          The uploaded files are saved and can be retried once the AI engine is available.
                         </p>
                       </div>
                     </div>
