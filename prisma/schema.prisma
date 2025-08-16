@@ -1,0 +1,39 @@
+// Datasource
+ datasource db {
+  provider = env("DATABASE_PROVIDER")
+  url      = env("DATABASE_URL")
+ }
+
+ // Generator
+ generator client {
+  provider = "prisma-client-js"
+ }
+
+ model JobRecord {
+  id            String   @id @default(cuid())
+  jobId         String   @unique
+  userId        String
+  status        String
+  progress      Int      @default(0)
+  error         String?
+  createdAt     DateTime @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+  failedAt      DateTime?
+  estimatedAt   DateTime?
+  propertyId    String?
+  files         ProcessingFile[]
+ }
+
+ model ProcessingFile {
+  id         String   @id @default(cuid())
+  jobRecord  JobRecord @relation(fields: [jobRecordId], references: [id])
+  jobRecordId String
+  name       String
+  originalName String
+  type       String
+  mimeType   String
+  size       Int
+  path       String
+  uploadedAt DateTime
+ }

@@ -38,7 +38,9 @@
     "docker:nginx": "docker-compose --profile with-nginx up -d",
     "worker:processing": "node --loader ts-node/esm src/workers/processing-worker.ts",
     "worker:export": "node --loader ts-node/esm src/workers/export-worker.ts",
-    "admin:queues": "node scripts/bull-board.js"
+    "admin:queues": "node scripts/bull-board.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev --name init"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.10.0",
@@ -53,6 +55,7 @@
     "@radix-ui/react-select": "^2.0.0",
     "@radix-ui/react-slot": "^1.0.2",
     "@radix-ui/react-toast": "^1.1.5",
+    "@prisma/client": "^5.17.0",
     "bullmq": "^5.14.0",
     "canvas": "^2.11.2",
     "class-variance-authority": "^0.7.0",
@@ -91,9 +94,10 @@
     "jest": "^30.0.5",
     "jest-environment-jsdom": "^30.0.5",
     "postcss": "^8",
+    "prisma": "^5.17.0",
     "supertest": "^7.1.4",
     "tailwindcss": "^3.3.0",
-    "typescript": "^5",
-    "ts-node": "^10.9.2"
+    "ts-node": "^10.9.2",
+    "typescript": "^5"
   }
 }

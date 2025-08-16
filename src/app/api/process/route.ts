@@ -20,6 +20,7 @@ import { spawn } from 'child_process';
 import { Readable } from 'stream';
 import { sseSendProcessingUpdate, sseSendProgressUpdate, sseSendJobComplete, sseSendError } from '@/lib/sse-manager';
 import { enqueueProcessing } from '@/lib/queue';
+import { recordJobStart, recordJobProgress, recordJobComplete, recordJobFailed } from '@/lib/job-db';
 
 const execPromise = promisify(exec);
 
@@ -349,6 +350,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
     };
     sendProcessingUpdate(jobId, (user as any).id, initialUpdate);
     sseSendProcessingUpdate(jobId, (user as any).id, initialUpdate);
+    await recordJobStart({ jobId, userId: (user as any).id, status: 'processing', progress: 0, propertyId: processingJob.propertyId, files: processingFiles });
 
     // Execute the command asynchronously with real-time updates
     const useQueue = !!process.env.REDIS_URL;
@@ -757,6 +759,7 @@ async function executeProcessingWithUpdates(
         const step = steps[currentStepIndex];
         sendProgressUpdate(jobId, userId, step.progress, step.message);
         sseSendProgressUpdate(jobId, userId, step.progress, step.message);
+        recordJobProgress(jobId, step.progress).catch(() => {});
         currentStepIndex++;
       } else {
         clearInterval(interval);
@@ -846,6 +849,7 @@ async function executeProcessingWithUpdates(
       };
       sendJobComplete(jobId, userId, completionPayload);
       sseSendJobComplete(jobId, userId, completionPayload);
+      recordJobComplete(jobId).catch(() => {});
     }, 1000);
 
   } catch (error) {
@@ -855,6 +859,7 @@ async function executeProcessingWithUpdates(
     const errorMessage = error instanceof Error ? error.message : "Processing failed";
     sendError(jobId, userId, errorMessage);
     sseSendError(jobId, userId, errorMessage);
+    recordJobFailed(jobId, errorMessage).catch(() => {});
     
     // Update job metadata with error
     const jobDir = path.join(process.cwd(), "uploads", jobId);
