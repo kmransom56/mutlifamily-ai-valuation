@@ -35,7 +35,9 @@
     "docker:restart": "docker-compose restart",
     "docker:clean": "docker system prune -a --volumes",
     "docker:status": "docker-compose ps",
-    "docker:nginx": "docker-compose --profile with-nginx up -d"
+    "docker:nginx": "docker-compose --profile with-nginx up -d",
+    "worker:processing": "node --loader ts-node/esm src/workers/processing-worker.ts",
+    "worker:export": "node --loader ts-node/esm src/workers/export-worker.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.10.0",
@@ -49,6 +51,7 @@
     "@radix-ui/react-slot": "^1.0.2",
     "@radix-ui/react-toast": "^1.1.5",
     "bullmq": "^5.14.0",
+    "canvas": "^2.11.2",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.0.0",
     "ioredis": "^5.4.1",
@@ -85,6 +88,7 @@
     "postcss": "^8",
     "supertest": "^7.1.4",
     "tailwindcss": "^3.3.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "ts-node": "^10.9.2"
   }
 }

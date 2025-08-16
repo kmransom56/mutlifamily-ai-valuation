@@ -116,7 +116,13 @@ function StatusContent() {
     if (!jobId) return;
     setActionLoading(true);
     try {
-      // Simple retry: re-check once, actual retry would re-run processing with saved files
+      const res = await fetch('/api/process/retry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId })
+      });
+      if (!res.ok) throw new Error('Retry failed');
+      setStatus('processing');
       setIsPolling(true);
     } catch (e) {
       setError('Failed to retry job');

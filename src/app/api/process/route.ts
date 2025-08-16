@@ -19,6 +19,7 @@ import { propertyDatabase } from '@/lib/property-database';
 import { spawn } from 'child_process';
 import { Readable } from 'stream';
 import { sseSendProcessingUpdate, sseSendProgressUpdate, sseSendJobComplete, sseSendError } from '@/lib/sse-manager';
+import { enqueueProcessing } from '@/lib/queue';
 
 const execPromise = promisify(exec);
 
@@ -350,13 +351,22 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
     sseSendProcessingUpdate(jobId, (user as any).id, initialUpdate);
 
     // Execute the command asynchronously with real-time updates
-    setTimeout(() => {
-      executeProcessingWithUpdates({
-        cwd: aiProcessingDir,
-        cmd: pythonCmd,
-        args: spawnArgs
-      }, jobId, (user as any).id, processingFiles.length);
-    }, 100);
+    const useQueue = !!process.env.REDIS_URL;
+    if (useQueue) {
+      await enqueueProcessing({
+        jobId,
+        userId: (user as any).id,
+        args: { cwd: aiProcessingDir, cmd: pythonCmd, args: spawnArgs }
+      });
+    } else {
+      setTimeout(() => {
+        executeProcessingWithUpdates({
+          cwd: aiProcessingDir,
+          cmd: pythonCmd,
+          args: spawnArgs
+        }, jobId, (user as any).id, processingFiles.length);
+      }, 100);
+    }
     
     // Calculate estimated completion time
     const estimatedMinutes = processingFiles.length * 2 + (generatePitchDeck ? 3 : 0) + (includeAnalysis ? 2 : 0);
