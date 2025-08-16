@@ -19,6 +19,7 @@ export interface WebSocketState {
   reconnectCount: number;
 }
 
+// Note: Backend WS is a placeholder; consider switching to an SSE-based hook.
 export function useWebSocket(options: UseWebSocketOptions = {}) {
   const { data: session } = useSession();
   const {
@@ -51,11 +52,10 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
 
     try {
       // Note: In a production environment, you would use a proper WebSocket URL
-      // For now, we'll simulate WebSocket functionality with polling
-      const ws = new WebSocket(`ws://localhost:3000/api/websocket?userId=${session.user.id}`);
+      // For now, backend returns 501 and UI should prefer SSE.
+      const ws = new WebSocket(`ws://localhost:3000/api/websocket?userId=${(session.user as any).id}`);
       
       ws.onopen = () => {
-        console.log('WebSocket connected');
         setState(prev => ({
           ...prev,
           connected: true,
@@ -100,7 +100,6 @@ export function useWebSocket(options: UseWebSocketOptions = {}) {
       };
 
       ws.onclose = () => {
-        console.log('WebSocket disconnected');
         setState(prev => ({
           ...prev,
           connected: false,
@@ -226,7 +225,6 @@ export function useJobStatusWebSocket(jobId: string | null) {
   };
 }
 
-// Simulated WebSocket for development/demo purposes
 export class SimulatedWebSocket {
   private static connections = new Map<string, any>();
   private static intervals = new Map<string, NodeJS.Timeout>();
@@ -269,7 +267,7 @@ export class SimulatedWebSocket {
     const interval = this.intervals.get(connectionId);
     if (interval) {
       clearInterval(interval);
-      this.intervals.delete(connectionId);
+      this.intervals.delete(interval as unknown as string);
     }
   }
 
@@ -312,7 +310,6 @@ export class SimulatedWebSocket {
       if (progress >= 100) {
         clearInterval(interval);
         
-        // Send completion message
         setTimeout(() => {
           this.sendToUser(userId, {
             type: 'job_completed',
@@ -329,8 +326,9 @@ export class SimulatedWebSocket {
           });
         }, 1000);
       }
-    }, 2000);
+    }, 2000) as unknown as NodeJS.Timeout;
 
+    this.intervals.set(`${userId}-${jobId}`, interval);
     return interval;
   }
 }

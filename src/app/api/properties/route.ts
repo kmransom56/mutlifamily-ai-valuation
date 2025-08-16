@@ -4,11 +4,15 @@ import { authOptions } from '@/lib/auth';
 import { propertyDatabase } from '@/lib/property-database';
 import { Property, PropertyFilter } from '@/types/property';
 
+function isProdLike() {
+  return process.env.NODE_ENV === 'production' || process.env.__FORCE_PROD__ === '1';
+}
+
 // GET /api/properties - List properties with optional filtering and pagination
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user && process.env.NODE_ENV === 'production') {
+    if (!session?.user && isProdLike()) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -66,7 +70,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user && process.env.NODE_ENV === 'production') {
+    if (!session?.user && isProdLike()) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -112,7 +116,7 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user && process.env.NODE_ENV === 'production') {
+    if (!session?.user && isProdLike()) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

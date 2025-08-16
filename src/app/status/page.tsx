@@ -43,10 +43,15 @@ function StatusContent() {
       return;
     }
 
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+
     const checkStatus = async () => {
       try {
-        const response = await fetch(`/api/process?jobId=${jobId}`);
+        const response = await fetch(`/api/process?jobId=${jobId}`, { cache: 'no-store' });
         const data = await response.json();
+
+        if (cancelled) return;
 
         if (data.success) {
           setStatus(data.job.status || data.status);
@@ -56,12 +61,12 @@ function StatusContent() {
           // If processing is complete or failed, stop polling
           if (data.job.status === 'completed' || data.job.status === 'failed') {
             setIsPolling(false);
+            return;
           }
-          
-          // Set error message if job failed
-          if (data.job.status === 'failed') {
-            setError(data.job.error || 'Processing failed');
-          }
+
+          // Adaptive debounce: longer delay when processing
+          const nextDelay = data.job.status === 'processing' ? 7000 : 3000;
+          timeoutId = setTimeout(checkStatus, nextDelay);
         } else {
           setStatus('error');
           setError(data.error || data.message || 'An error occurred while checking status');
@@ -75,20 +80,15 @@ function StatusContent() {
       }
     };
 
-    // Check status immediately
-    checkStatus();
-
-    // Set up polling if needed
-    let intervalId: ReturnType<typeof setInterval> | undefined;
+    // Kickoff
     if (isPolling) {
-      intervalId = setInterval(checkStatus, 5000); // Check every 5 seconds
+      checkStatus();
     }
 
-    // Clean up interval on unmount
+    // Cleanup on unmount
     return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
     };
   }, [jobId, isPolling]);
 

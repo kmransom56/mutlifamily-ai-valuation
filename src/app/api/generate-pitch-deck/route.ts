@@ -251,7 +251,7 @@ export async function POST(request: NextRequest) {
     ];
     
     // Add table (left side)
-    slide3.addTable(financialData, {
+    slide3.addTable(financialData as any, {
       x: 0.5, y: 1.8, w: 6, h: 3.5,
       fontSize: 12,
       color: colors.secondary,
@@ -269,14 +269,13 @@ export async function POST(request: NextRequest) {
       { name: 'Operating Expenses', labels: ['OpEx'], values: [operatingExpenses] }
     ];
     
-    slide3.addChart(pptx.ChartType.pie, pieChartData, {
+    slide3.addChart(pptx.ChartType.pie, pieChartData as any, {
       x: 7, y: 1.8, w: 5, h: 3.5,
       title: 'Income Distribution',
       titleColor: colors.primary,
       titleFontSize: 14,
       chartColors: [colors.success, colors.warning],
-      dataLabelPosition: 'bestFit',
-      showDataTableHorizontal: false
+      dataLabelPosition: 'bestFit'
     });
     
     // Add return metrics below
@@ -304,7 +303,7 @@ export async function POST(request: NextRequest) {
       ['Status:', pitch_deck_data.market_analysis.status]
     ];
     
-    slide4.addTable(propertyDetails, {
+    slide4.addTable(propertyDetails as any, {
       x: 1, y: 1.8, w: 5, h: 4,
       fontSize: 14,
       color: colors.secondary,
@@ -322,7 +321,7 @@ export async function POST(request: NextRequest) {
       ['Analysis Date:', new Date().toLocaleDateString()]
     ];
     
-    slide4.addTable(investmentMetrics, {
+    slide4.addTable(investmentMetrics as any, {
       x: 7, y: 1.8, w: 5, h: 4,
       fontSize: 14,
       color: colors.secondary,
@@ -349,7 +348,7 @@ export async function POST(request: NextRequest) {
       }
     ];
     
-    slide5.addChart(pptx.ChartType.bar, marketCompData, {
+    slide5.addChart(pptx.ChartType.bar, marketCompData as any, {
       x: 0.5, y: 1.5, w: 6, h: 3.5,
       title: 'Cap Rate Positioning (%)',
       titleColor: colors.primary,
@@ -357,8 +356,7 @@ export async function POST(request: NextRequest) {
       chartColors: [colors.accent],
       barDir: 'col',
       catAxisTitle: 'Property Type',
-      valAxisTitle: 'Cap Rate %',
-      showDataTableHorizontal: false
+      valAxisTitle: 'Cap Rate %'
     });
     
     // Strategy points (right side)

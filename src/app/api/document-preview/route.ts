@@ -118,8 +118,8 @@ async function generateBasicDocumentPreview(params: {
     type: getDocumentType(fileExt),
     pages: [{
       pageNumber: 1,
-      imageUrl: `/api/files?path=${encodeURIComponent(actualFilePath)}`,
-      thumbnailUrl: `/api/files/thumbnail?path=${encodeURIComponent(actualFilePath)}`,
+      imageUrl: `/api/files?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&type=preview`,
+      thumbnailUrl: `/api/files?jobId=${encodeURIComponent(params.jobId || '')}&file=${encodeURIComponent(fileName)}&type=preview`,
       textContent: `File: ${fileName}`,
       annotations: []
     }],
@@ -162,8 +162,8 @@ async function getBasicDocumentPreview(fileId: string, userId: string): Promise<
     type: 'text',
     pages: [{
       pageNumber: 1,
-      imageUrl: `/api/files?fileId=${fileId}`,
-      thumbnailUrl: `/api/files/thumbnail?fileId=${fileId}`,
+      imageUrl: `/api/files?file=${encodeURIComponent(fileId)}&type=preview`,
+      thumbnailUrl: `/api/files?file=${encodeURIComponent(fileId)}&type=preview`,
       textContent: 'Document preview available',
       annotations: []
     }],

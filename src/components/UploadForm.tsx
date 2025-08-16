@@ -108,9 +108,9 @@ export default function UploadForm() {
       const formData = new FormData();
       
       // Append files to form data
-      if (files.rentRoll) formData.append('rent_roll', files.rentRoll);
+      if (files.rentRoll) formData.append('rentRoll', files.rentRoll);
       if (files.t12) formData.append('t12', files.t12);
-      if (files.offeringMemo) formData.append('om', files.offeringMemo);
+      if (files.offeringMemo) formData.append('offeringMemo', files.offeringMemo);
       if (files.template) formData.append('template', files.template);
       
       // Append property info

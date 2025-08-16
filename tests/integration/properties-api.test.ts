@@ -88,15 +88,15 @@ describe('/api/properties Integration Tests', () => {
     it('should return 401 for unauthenticated users in production', async () => {
       getServerSession.mockResolvedValue(null);
       
-      // Mock production environment
-      const originalEnv = process.env.NODE_ENV;
-      process.env.NODE_ENV = 'production';
+      // Simulate production without mutating read-only NODE_ENV
+      const originalFlag = process.env.__FORCE_PROD__;
+      process.env.__FORCE_PROD__ = '1';
 
       await app
         .get('/api/properties')
         .expect(401);
 
-      process.env.NODE_ENV = originalEnv;
+      if (originalFlag) process.env.__FORCE_PROD__ = originalFlag; else delete process.env.__FORCE_PROD__;
     });
   });
 

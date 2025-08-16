@@ -16,6 +16,9 @@ import {
 } from '@/types/processing';
 import { sendProcessingUpdate, sendProgressUpdate, sendJobComplete, sendError } from '@/lib/websocket-manager';
 import { propertyDatabase } from '@/lib/property-database';
+import { spawn } from 'child_process';
+import { Readable } from 'stream';
+import { sseSendProcessingUpdate, sseSendProgressUpdate, sseSendJobComplete, sseSendError } from '@/lib/sse-manager';
 
 const execPromise = promisify(exec);
 
@@ -29,6 +32,42 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 }
 if (!fs.existsSync(OUTPUT_DIR)) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+}
+
+// Helper: sanitize filenames
+function sanitizeFilename(name: string): string {
+  return name.replace(/[/\\?%*:|"<>]/g, '_');
+}
+
+// Helper: allowed extensions per file type
+function isAllowedExtension(fileName: string, type: 'rent_roll' | 't12' | 'offering_memo' | 'template'): boolean {
+  const ext = path.extname(fileName).toLowerCase();
+  const byType: Record<string, string[]> = {
+    rent_roll: ['.pdf', '.xlsx', '.xls', '.xlsb'],
+    t12: ['.xlsx', '.xls', '.xlsb'],
+    offering_memo: ['.pdf'],
+    template: ['.xlsx', '.xls', '.xlsb', '.xltx']
+  };
+  return byType[type].includes(ext);
+}
+
+// Helper: stream write uploaded file to disk
+async function writeUploadedFile(file: File, destPath: string): Promise<void> {
+  const webStream = (file as any).stream?.();
+  if (webStream && (Readable as any).fromWeb) {
+    await new Promise<void>((resolve, reject) => {
+      const writeStream = fs.createWriteStream(destPath);
+      const nodeStream = (Readable as any).fromWeb(webStream);
+      nodeStream.pipe(writeStream);
+      writeStream.on('finish', () => resolve());
+      writeStream.on('error', reject);
+      nodeStream.on('error', reject);
+    });
+  } else {
+    // Fallback to buffer if stream not available
+    const buf = Buffer.from(await file.arrayBuffer());
+    await fs.promises.writeFile(destPath, buf);
+  }
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse<ProcessingResponse>> {
@@ -70,6 +109,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
     const propertyId = formData.get('propertyId') as string | null;
     const generatePitchDeck = formData.get('generatePitchDeck') === 'true';
     const includeAnalysis = formData.get('includeAnalysis') === 'true';
+
+    // New: Extract high-level property info and persist immediately
+    const propertyName = (formData.get('propertyName') as string | null) || undefined;
+    const propertyType = (formData.get('propertyType') as string | null) || 'multifamily';
+    const investmentStrategy = (formData.get('investmentStrategy') as string | null) || undefined;
+    const unitsStr = (formData.get('units') as string | null) || undefined;
+    const location = (formData.get('location') as string | null) || undefined;
+    const parsedUnits = unitsStr ? parseInt(unitsStr, 10) : undefined;
     
     // Validate at least one file is provided
     if (!rentRollFile && !t12File && !omFile) {
@@ -104,16 +151,37 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
       notifications
     };
 
+    // If client provided property info, create a placeholder property immediately
+    if (!processingJob.propertyId && propertyName && location) {
+      try {
+        const created = await propertyDatabase.saveProperty({
+          name: propertyName,
+          type: (propertyType as any) || 'multifamily',
+          location,
+          units: parsedUnits && !Number.isNaN(parsedUnits) ? parsedUnits : 1,
+          userId: (user as any).id,
+          notes: investmentStrategy ? `Investment strategy: ${investmentStrategy}` : undefined
+        });
+        processingJob.propertyId = created.id;
+      } catch (e) {
+        // Non-fatal
+        console.error('Failed to create placeholder property:', e);
+      }
+    }
+
     // File paths and processing files
     const filePaths: Record<string, string> = {};
     const processingFiles: ProcessingFile[] = [];
     
-    // Save files if provided with enhanced metadata
+    // Save files if provided with enhanced metadata (streaming + sanitization)
     if (rentRollFile && rentRollFile.size > 0) {
-      const fileName = `rent_roll_${Date.now()}_${rentRollFile.name}`;
+      const safeOriginal = sanitizeFilename(rentRollFile.name);
+      if (!isAllowedExtension(safeOriginal, 'rent_roll')) {
+        return NextResponse.json({ success: false, jobId: '', message: 'Invalid rent roll file type', statusUrl: '', error: 'Unsupported file type' }, { status: 400 });
+      }
+      const fileName = `rent_roll_${Date.now()}_${safeOriginal}`;
       const rentRollPath = path.join(jobDir, fileName);
-      const rentRollBuffer = Buffer.from(await rentRollFile.arrayBuffer());
-      fs.writeFileSync(rentRollPath, rentRollBuffer);
+      await writeUploadedFile(rentRollFile, rentRollPath);
       filePaths.rentRoll = rentRollPath;
       
       processingFiles.push({
@@ -131,10 +199,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
     }
     
     if (t12File && t12File.size > 0) {
-      const fileName = `t12_${Date.now()}_${t12File.name}`;
+      const safeOriginal = sanitizeFilename(t12File.name);
+      if (!isAllowedExtension(safeOriginal, 't12')) {
+        return NextResponse.json({ success: false, jobId: '', message: 'Invalid T12 file type', statusUrl: '', error: 'Unsupported file type' }, { status: 400 });
+      }
+      const fileName = `t12_${Date.now()}_${safeOriginal}`;
       const t12Path = path.join(jobDir, fileName);
-      const t12Buffer = Buffer.from(await t12File.arrayBuffer());
-      fs.writeFileSync(t12Path, t12Buffer);
+      await writeUploadedFile(t12File, t12Path);
       filePaths.t12 = t12Path;
       
       processingFiles.push({
@@ -152,10 +223,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
     }
     
     if (omFile && omFile.size > 0) {
-      const fileName = `offering_memo_${Date.now()}_${omFile.name}`;
+      const safeOriginal = sanitizeFilename(omFile.name);
+      if (!isAllowedExtension(safeOriginal, 'offering_memo')) {
+        return NextResponse.json({ success: false, jobId: '', message: 'Invalid offering memo file type', statusUrl: '', error: 'Unsupported file type' }, { status: 400 });
+      }
+      const fileName = `offering_memo_${Date.now()}_${safeOriginal}`;
       const omPath = path.join(jobDir, fileName);
-      const omBuffer = Buffer.from(await omFile.arrayBuffer());
-      fs.writeFileSync(omPath, omBuffer);
+      await writeUploadedFile(omFile, omPath);
       filePaths.om = omPath;
       
       processingFiles.push({
@@ -173,10 +247,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
     }
     
     if (templateFile && templateFile.size > 0) {
-      const fileName = `template_${Date.now()}_${templateFile.name}`;
+      const safeOriginal = sanitizeFilename(templateFile.name);
+      if (!isAllowedExtension(safeOriginal, 'template')) {
+        return NextResponse.json({ success: false, jobId: '', message: 'Invalid template file type', statusUrl: '', error: 'Unsupported file type' }, { status: 400 });
+      }
+      const fileName = `template_${Date.now()}_${safeOriginal}`;
       const templatePath = path.join(jobDir, fileName);
-      const templateBuffer = Buffer.from(await templateFile.arrayBuffer());
-      fs.writeFileSync(templatePath, templateBuffer);
+      await writeUploadedFile(templateFile, templatePath);
       filePaths.template = templatePath;
       
       processingFiles.push({
@@ -198,15 +275,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
     
     // Save job metadata
     const jobMetadataPath = path.join(jobDir, 'job_metadata.json');
-    fs.writeFileSync(jobMetadataPath, JSON.stringify(processingJob, null, 2));
-    
-    // Show what files were uploaded and explain the processing requirement
-    const filesList = [
-      filePaths.rentRoll && `- Rent Roll: ${filePaths.rentRoll}`,
-      filePaths.t12 && `- T12: ${filePaths.t12}`,
-      filePaths.om && `- Offering Memo: ${filePaths.om}`,
-      filePaths.template && `- Template: ${filePaths.template}`
-    ].filter(Boolean).join('\\n');
+    fs.writeFileSync(jobMetadataPath, JSON.stringify({
+      ...processingJob,
+      propertyInfo: { propertyName, propertyType, investmentStrategy, units: parsedUnits, location }
+    }, null, 2));
     
     // Build command to run Python processing system
     const aiProcessingDir = path.join(process.cwd(), 'ai_processing');
@@ -223,18 +295,19 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
       }, { status: 500 });
     }
     
-    // Build command arguments
-    const args = [
-      `--output-dir "${outputDir}"`,
-      `--job-id "${jobId}"`,
-      propertyId ? `--property-id "${propertyId}"` : '',
-      filePaths.rentRoll ? `--rent-roll "${filePaths.rentRoll}"` : '',
-      filePaths.t12 ? `--t12 "${filePaths.t12}"` : '',
-      filePaths.om ? `--om "${filePaths.om}"` : '',
-      filePaths.template ? `--template "${filePaths.template}"` : '',
-      generatePitchDeck ? '--generate-pitch-deck' : '',
-      includeAnalysis ? '--include-analysis' : ''
-    ].filter(Boolean).join(' ');
+    // Build spawn arguments
+    const spawnArgs: string[] = [
+      mainScript,
+      '--output-dir', outputDir,
+      '--job-id', jobId
+    ];
+    if (processingJob.propertyId) { spawnArgs.push('--property-id', processingJob.propertyId); }
+    if (filePaths.rentRoll) { spawnArgs.push('--rent-roll', filePaths.rentRoll); }
+    if (filePaths.t12) { spawnArgs.push('--t12', filePaths.t12); }
+    if (filePaths.om) { spawnArgs.push('--om', filePaths.om); }
+    if (filePaths.template) { spawnArgs.push('--template', filePaths.template); }
+    if (generatePitchDeck) { spawnArgs.push('--generate-pitch-deck'); }
+    if (includeAnalysis) { spawnArgs.push('--include-analysis'); }
     
     // Use virtual environment if available, otherwise use system Python
     const venvPythonUnix = path.join(aiProcessingDir, 'venv', 'bin', 'python3');
@@ -247,12 +320,10 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
       pythonCmd = venvPythonWin;
     }
     
-    const command = `cd "${aiProcessingDir}" && "${pythonCmd}" "${mainScript}" ${args}`;
-    
-    // Send initial processing update
-    sendProcessingUpdate(jobId, (user as any).id, {
+    // Send initial processing update (WS + SSE)
+    const initialUpdate = {
       jobId,
-      status: 'processing',
+      status: 'processing' as const,
       progress: 0,
       currentStep: 'Initializing processing job',
       message: 'Job started, preparing to process files',
@@ -261,12 +332,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<Processin
         processed: 0,
         total: processingFiles.length
       }
-    });
+    };
+    sendProcessingUpdate(jobId, (user as any).id, initialUpdate);
+    sseSendProcessingUpdate(jobId, (user as any).id, initialUpdate);
 
     // Execute the command asynchronously with real-time updates
-    // In a production environment, this would be handled by a job queue
     setTimeout(() => {
-      executeProcessingWithUpdates(command, jobId, (user as any).id, processingFiles.length);
+      executeProcessingWithUpdates({
+        cwd: aiProcessingDir,
+        cmd: pythonCmd,
+        args: spawnArgs
+      }, jobId, (user as any).id, processingFiles.length);
     }, 100);
     
     // Calculate estimated completion time
@@ -395,11 +471,11 @@ export async function GET(request: NextRequest): Promise<NextResponse<JobStatusR
         currentStatus = 'failed';
         try {
           const errorDetails = JSON.parse(fs.readFileSync(errorDetailsPath, 'utf-8'));
-          processingJob.error = errorDetails.error;
+          (processingJob as any).error = errorDetails.error;
         } catch {
-          processingJob.error = 'Processing failed with unknown error';
+          (processingJob as any).error = 'Processing failed with unknown error';
         }
-        processingJob.failedAt = new Date().toISOString();
+        (processingJob as any).failedAt = new Date().toISOString();
       } else {
         // Calculate progress based on completed files
         if (fs.existsSync(integratedDataPath)) {
@@ -429,7 +505,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<JobStatusR
             if (results.status === 'completed') {
               currentStatus = 'completed';
               progress = 100;
-              processingJob.completedAt = new Date().toISOString();
+              (processingJob as any).completedAt = new Date().toISOString();
             }
           } catch {
             // Continue with file-based progress calculation
@@ -439,8 +515,9 @@ export async function GET(request: NextRequest): Promise<NextResponse<JobStatusR
       
       // Add all available files to download URLs
       files.forEach(file => {
-        if (!downloadUrls[file.replace(/\.[^/.]+$/, "")]) {
-          downloadUrls[file.replace(/\.[^/.]+$/, "")] = `/api/files?jobId=${jobId}&file=${file}`;
+        const key = file.replace(/\.[^/.]+$/, "");
+        if (!downloadUrls[key]) {
+          downloadUrls[key] = `/api/files?jobId=${jobId}&file=${encodeURIComponent(file)}`;
         }
       });
     }
@@ -571,7 +648,6 @@ async function createPropertyFromProcessingResults(outputDir: string, jobId: str
           // Try to extract property name from file names
           const t12File = jobMetadata.files?.find((f: any) => f.type === 't12');
           if (t12File?.originalName) {
-            // Extract property name from T12 filename (e.g., "052125 HC 12712 C LLC Trailing 12mth Financials.xlsx")
             const fileName = t12File.originalName;
             if (fileName.includes('HC') && fileName.includes('LLC')) {
               const match = fileName.match(/HC\s+\d+\s+\w+\s+LLC/);
@@ -633,9 +709,9 @@ function calculateViabilityScore(propertyData: any): number {
   return Math.max(0, Math.min(100, score));
 }
 
-// Enhanced processing function with real-time WebSocket updates
+// Enhanced processing function with real-time WebSocket + SSE updates (spawn-based)
 async function executeProcessingWithUpdates(
-  command: string, 
+  proc: { cwd: string; cmd: string; args: string[] }, 
   jobId: string, 
   userId: string, 
   totalFiles: number
@@ -653,26 +729,48 @@ async function executeProcessingWithUpdates(
     // Simulate progressive updates during processing
     let currentStepIndex = 0;
     
-    const updateInterval = setInterval(() => {
+    const interval = setInterval(() => {
       if (currentStepIndex < steps.length) {
         const step = steps[currentStepIndex];
         sendProgressUpdate(jobId, userId, step.progress, step.message);
+        sseSendProgressUpdate(jobId, userId, step.progress, step.message);
         currentStepIndex++;
       } else {
-        clearInterval(updateInterval);
+        clearInterval(interval);
       }
     }, 2000);
 
-    // Execute the actual command
+    // Execute the actual command via spawn
     try {
-      const { stdout, stderr } = await execPromise(command);
-      clearInterval(updateInterval);
-      console.log("Processing completed:", stdout);
-      if (stderr) {
-        console.error("Processing errors:", stderr);
-      }
+      const child = spawn(proc.cmd, proc.args, { cwd: proc.cwd });
+
+      child.stdout.on('data', (data: Buffer) => {
+        const text = data.toString();
+        // Optional: parse lines for progress hints like "PROGRESS: 60 Processing..."
+        const match = text.match(/PROGRESS:\s*(\d{1,3})\s*(.*)/i);
+        if (match) {
+          const pct = Math.min(100, Math.max(0, parseInt(match[1], 10)));
+          const msg = match[2] || 'Processing';
+          sendProgressUpdate(jobId, userId, pct, msg);
+          sseSendProgressUpdate(jobId, userId, pct, msg);
+        }
+      });
+
+      child.stderr.on('data', (data: Buffer) => {
+        const text = data.toString();
+        console.error('Processing stderr:', text);
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        child.on('error', reject);
+        child.on('close', (code) => {
+          clearInterval(interval);
+          if (code === 0) resolve();
+          else reject(new Error(`Processing exited with code ${code}`));
+        });
+      });
     } catch (cmdError) {
-      clearInterval(updateInterval);
+      clearInterval((global as any).noopInterval ?? undefined);
       console.error("Command execution failed:", cmdError);
       
       // For development, provide helpful error message
@@ -685,6 +783,7 @@ async function executeProcessingWithUpdates(
 
     // Send completion update
     sendProgressUpdate(jobId, userId, 100, "Processing completed successfully");
+    sseSendProgressUpdate(jobId, userId, 100, "Processing completed successfully");
     
     // Load results and send completion notification
     setTimeout(async () => {
@@ -697,7 +796,7 @@ async function executeProcessingWithUpdates(
         files.forEach(file => {
           if (file.endsWith(".json") || file.endsWith(".pdf") || file.endsWith(".xlsx") || file.endsWith(".pptx")) {
             const fileName = file.replace(/\.[^/.]+$/, "");
-            downloadUrls[fileName] = `/api/files?jobId=${jobId}&file=${file}`;
+            downloadUrls[fileName] = `/api/files?jobId=${jobId}&file=${encodeURIComponent(file)}`;
           }
         });
 
@@ -705,13 +804,15 @@ async function executeProcessingWithUpdates(
         await createPropertyFromProcessingResults(outputDir, jobId, userId);
       }
       
-      sendJobComplete(jobId, userId, {
+      const completionPayload = {
         jobId,
         status: "completed",
         message: "All processing tasks completed successfully",
         downloadUrls,
         timestamp: new Date().toISOString()
-      });
+      };
+      sendJobComplete(jobId, userId, completionPayload);
+      sseSendJobComplete(jobId, userId, completionPayload);
     }, 1000);
 
   } catch (error) {
@@ -720,6 +821,7 @@ async function executeProcessingWithUpdates(
     // Send error update
     const errorMessage = error instanceof Error ? error.message : "Processing failed";
     sendError(jobId, userId, errorMessage);
+    sseSendError(jobId, userId, errorMessage);
     
     // Update job metadata with error
     const jobDir = path.join(process.cwd(), "uploads", jobId);

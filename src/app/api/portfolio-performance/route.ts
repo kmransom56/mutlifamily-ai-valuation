@@ -413,7 +413,7 @@ async function generatePortfolioExcelReport(portfolioData: PortfolioAnalytics, p
     
   } catch (error) {
     console.warn('Portfolio Excel report generation failed, continuing without file:', error);
-    return null;
+    return '';
   }
 }
 
