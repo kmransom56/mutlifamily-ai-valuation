@@ -4,7 +4,49 @@ type SseEventPayload = {
   data: any;
   timestamp: string;
 };
+// Define payload types for each event type
+interface StatusUpdatePayload {
+  type: 'status_update';
+  jobId: string;
+  data: Record<string, unknown>;
+  timestamp: string;
+}
 
+interface ProgressUpdateData {
+  jobId: string;
+  status: 'processing';
+  progress: number;
+  currentStep: string;
+  message: string;
+  timestamp: string;
+}
+
+interface ProgressUpdatePayload {
+  type: 'progress_update';
+  jobId: string;
+  data: ProgressUpdateData;
+  timestamp: string;
+}
+
+interface JobCompletedPayload {
+  type: 'job_completed';
+  jobId: string;
+  data: Record<string, unknown>;
+  timestamp: string;
+}
+
+interface ErrorPayload {
+  type: 'error';
+  jobId: string;
+  data: { error: string };
+  timestamp: string;
+}
+
+type SseEventPayload =
+  | StatusUpdatePayload
+  | ProgressUpdatePayload
+  | JobCompletedPayload
+  | ErrorPayload;
 interface SseClient {
   id: string;
   userId: string;
