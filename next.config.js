@@ -7,6 +7,15 @@ const nextConfig = {
         source: '/health',
         destination: '/api/health',
       },
+      // Proxy Bull Board admin to local server (requires npm run admin:queues)
+      {
+        source: '/admin/queues',
+        destination: 'http://localhost:9999/admin/queues',
+      },
+      {
+        source: '/admin/queues/:path*',
+        destination: 'http://localhost:9999/admin/queues/:path*',
+      },
     ];
   },
   // Environment configuration
